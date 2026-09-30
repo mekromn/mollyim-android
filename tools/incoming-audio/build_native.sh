@@ -52,7 +52,9 @@ fi
 [[ $(cat "$PREPARED") == "$(checkpoint)" ]] || { echo 'Prepared source revisions changed; refusing cached workspace' >&2; exit 1; }
 (cd src/webrtc/src && gn --version)
 python3 "$ROOT/tools/incoming-audio/patch_ringrtc.py" "$WORK/ringrtc"
-./bin/build-aar --release-build --arch arm64 -j "${BUILD_JOBS:-2}" --extra-ninja-flags="-j${BUILD_JOBS:-2}"
+# Siso uses -offline, not Ninja's unsupported -jN spelling.
+# Its local worker count defaults to the available CPUs.
+./bin/build-aar --release-build --arch arm64 -j "${BUILD_JOBS:-2}" --extra-ninja-flags=-offline
 # Support both the Gradle buildDir override and the Android module default.
 mapfile -t AARS < <(find "$WORK/ringrtc/out" "$WORK/ringrtc/src/android" -type f \
   \( -name 'ringrtc-android-release.aar' -o -name 'ringrtc-android-2.69.5-1.aar' \) | sort -u)

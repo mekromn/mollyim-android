@@ -56,6 +56,7 @@ exec /usr/bin/python3 "$@"
         self.executable(self.work / 'ringrtc/bin/build-aar', '''#!/bin/sh
 [ -f "$FIXTURE_WORK/depot_tools/python3_bin_reldir.txt" ] || { echo 'python3_bin_reldir.txt not found' >&2; exit 71; }
 echo build >> "$EVENTS"
+printf '%s\\n' "$@" > "$FIXTURE_WORK/build-arguments"
 mkdir -p out/gradle/outputs/aar
 printf fixture > out/gradle/outputs/aar/ringrtc-android-release.aar
 ''')
@@ -85,6 +86,14 @@ printf fixture > out/gradle/outputs/aar/ringrtc-android-release.aar
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(self.events(), ['bootstrap', 'patch', 'build', 'verify'])
         self.assertTrue((self.project / 'out/incoming-audio/ringrtc-incoming-audio-arm64.aar').is_file())
+
+    def test_uses_siso_offline_flag_instead_of_ninja_j(self):
+        self.assertEqual(self.run_driver('prepare').returncode, 0)
+        result = self.run_driver('build')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        args = (self.work / 'build-arguments').read_text().splitlines()
+        self.assertIn('--extra-ninja-flags=-offline', args)
+        self.assertFalse(any(a.startswith('--extra-ninja-flags=-j') for a in args))
 
     def test_build_requires_a_prepared_checkpoint(self):
         result = self.run_driver('build')
