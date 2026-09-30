@@ -7,7 +7,13 @@
 
 namespace molly_audio {
 // One configuration per app process; filter/envelope state remains per transport.
-inline SettingsBus settings_bus;
+inline SettingsBus& GetSettingsBus() {
+  // Process-lifetime control data only; no audio is retained here. Constructed
+  // by ReceiveProcessor before callbacks start, never in Process(). Avoid an
+  // exit-time mutex destructor racing native library teardown.
+  static auto* const bus = new SettingsBus();
+  return *bus;
+}
 inline std::atomic<uint32_t> reset_epoch{0};
 inline std::atomic<uint32_t> frame_counter{0};
 inline std::array<std::atomic<float>,6> meter_values{};
@@ -19,20 +25,22 @@ class ReceiveProcessor {
     last_frame_=now;
     const auto epoch=reset_epoch.load(std::memory_order_relaxed);
     if(epoch_!=epoch) {processor_.Reset();epoch_=epoch;}
-    settings_bus.Read(settings_);  // Keep last coherent settings if writer is busy.
+    settings_bus_.Read(settings_);  // Keep last coherent settings if writer is busy.
     const size_t count=frame->samples_per_channel()*frame->num_channels();
     if(count>scratch_.size() || frame->num_channels()>kMaxChannels || !count) return;
+    const auto input=frame->data_view();
+    if(input.size()!=count) return;
     Meters meters;
     if(frame->muted()) {
       processor_.PrepareSilence(settings_.enabled);
     } else if(!settings_.enabled && processor_.bypassed()) {
       // Preserve the original int16 buffer exactly, including its mute state.
-      for(size_t i=0;i<count;++i)meters.input_peak=std::max(meters.input_peak,std::abs(frame->data()[i]/32768.0f));
+      for(size_t i=0;i<count;++i)meters.input_peak=std::max(meters.input_peak,std::abs(input[i]/32768.0f));
       meters.output_peak=meters.input_peak;
     } else {
-      for(size_t i=0;i<count;++i)scratch_[i]=frame->data()[i]/32768.0f;
-      processor_.Process(scratch_.data(),frame->samples_per_channel(),frame->num_channels(),frame->sample_rate_hz(),settings_);
-      int16_t* pcm=frame->mutable_data();
+      for(size_t i=0;i<count;++i)scratch_[i]=input[i]/32768.0f;
+      processor_.Process(std::span(scratch_).first(count),frame->samples_per_channel(),frame->num_channels(),frame->sample_rate_hz(),settings_);
+      auto pcm=frame->mutable_data(frame->samples_per_channel(),frame->num_channels());
       const bool limiting=settings_.enabled && settings_.limiter_enabled;
       const int peak_bound=static_cast<int>(std::floor(Linear(settings_.ceiling_db)*32768));
       for(size_t i=0;i<count;++i) {
@@ -51,6 +59,7 @@ class ReceiveProcessor {
     frame_counter.fetch_add(1,std::memory_order_relaxed);
   }
  private:
+  SettingsBus& settings_bus_=GetSettingsBus();
   std::chrono::steady_clock::time_point last_frame_{};
   Processor processor_;
   Settings settings_;

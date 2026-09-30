@@ -8,6 +8,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <mutex>
+#include <span>
 
 namespace molly_audio {
 constexpr size_t kBands = 10;
@@ -43,7 +44,7 @@ struct Settings {
     a[4]=gain_db; a[5]=threshold_db; a[6]=ratio; a[7]=attack_ms;
     a[8]=release_ms; a[9]=knee_db; a[10]=makeup_db;
     a[11]=ceiling_db; a[12]=limiter_release_ms;
-    std::copy(eq_db.begin(),eq_db.end(),a.begin()+13); a[23]=gain_enabled;
+    for(size_t i=0;i<kBands;++i) a[13+i]=eq_db[i]; a[23]=gain_enabled;
     return a;
   }
   static Settings Unpack(const std::array<float,kParameters>& a) {
@@ -53,7 +54,7 @@ struct Settings {
     s.gain_db=a[4]; s.threshold_db=a[5]; s.ratio=a[6]; s.attack_ms=a[7];
     s.release_ms=a[8]; s.knee_db=a[9]; s.makeup_db=a[10];
     s.ceiling_db=a[11]; s.limiter_release_ms=a[12];
-    std::copy(a.begin()+13,a.begin()+23,s.eq_db.begin());
+    for(size_t i=0;i<kBands;++i) s.eq_db[i]=a[13+i];
     s.gain_enabled=a[23]>0.5f; s.Sanitize(); return s;
   }
 };
@@ -108,8 +109,8 @@ class Processor {
   bool bypassed() const { return wet_ == 0; }
   bool fully_wet() const { return wet_ == 1; }
   // Normalized, interleaved float32. Does not allocate or take locks.
-  void Process(float* pcm,size_t frames,size_t channels,int rate,Settings settings) {
-    if(!pcm || !frames || !channels || channels>kMaxChannels || rate<8000 || rate>192000) return;
+  void Process(std::span<float> pcm,size_t frames,size_t channels,int rate,Settings settings) {
+    if(!frames || !channels || channels>kMaxChannels || rate<8000 || rate>192000 || frames>pcm.size()/channels) return;
     settings.Sanitize(); meters_={};
     if(rate_!=rate || channels_!=channels) {
       filters_={}; compression_=0; limiter_gain_=1; rate_=rate; channels_=channels;

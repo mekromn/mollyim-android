@@ -3,7 +3,14 @@
 use jni::{EnvUnowned, objects::JClass, sys::{jboolean, jfloat, jint, jlong}};
 unsafe extern "C" {
     fn Rust_MollyIncomingAudioVersion() -> i32;
-    fn Rust_MollyIncomingAudioConfigure(values: *const f32, length: usize) -> i32;
+    fn Rust_MollyIncomingAudioConfigure(
+        p0: f32, p1: f32, p2: f32, p3: f32,
+        p4: f32, p5: f32, p6: f32, p7: f32,
+        p8: f32, p9: f32, p10: f32, p11: f32,
+        p12: f32, p13: f32, p14: f32, p15: f32,
+        p16: f32, p17: f32, p18: f32, p19: f32,
+        p20: f32, p21: f32, p22: f32, p23: f32,
+    ) -> i32;
     fn Rust_MollyIncomingAudioReset();
     fn Rust_MollyIncomingAudioMeter(index: i32) -> f32;
     fn Rust_MollyIncomingAudioFrames() -> u32;
@@ -24,8 +31,7 @@ pub extern "C" fn Java_org_thoughtcrime_securesms_webrtc_audio_IncomingAudioBrid
     p16: jfloat, p17: jfloat, p18: jfloat, p19: jfloat,
     p20: jfloat, p21: jfloat, p22: jfloat, p23: jfloat,
 ) -> jboolean {
-    let values = [p0,p1,p2,p3,p4,p5,p6,p7,p8,p9,p10,p11,p12,p13,p14,p15,p16,p17,p18,p19,p20,p21,p22,p23];
-    unsafe { (Rust_MollyIncomingAudioConfigure(values.as_ptr(), values.len()) != 0) as jboolean }
+    unsafe { (Rust_MollyIncomingAudioConfigure(p0,p1,p2,p3,p4,p5,p6,p7,p8,p9,p10,p11,p12,p13,p14,p15,p16,p17,p18,p19,p20,p21,p22,p23) != 0) as jboolean }
 }
 #[unsafe(no_mangle)]
 #[allow(non_snake_case)]
