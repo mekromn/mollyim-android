@@ -27,7 +27,10 @@ rustup target add aarch64-linux-android
 ./bin/prepare-workspace android
 python3 "$ROOT/tools/incoming-audio/patch_ringrtc.py" "$WORK/ringrtc"
 ./bin/build-aar --release-build --arch arm64 -j "${BUILD_JOBS:-2}" --extra-ninja-flags="-j${BUILD_JOBS:-2}"
-mapfile -t AARS < <(find "$WORK/ringrtc/out/release" -maxdepth 1 -type f -name '*.aar')
+# Support both the Gradle buildDir override and the Android module default.
+# Do not accidentally select debug AARs or unrelated WebRTC dependencies.
+mapfile -t AARS < <(find "$WORK/ringrtc/out" "$WORK/ringrtc/src/android" -type f \
+  \( -name 'ringrtc-android-release.aar' -o -name 'ringrtc-android-2.69.5-1.aar' \) | sort -u)
 [[ ${#AARS[@]} == 1 ]] || { printf 'Expected one release AAR, found %s\n' "${#AARS[@]}" >&2; exit 1; }
 DEST="$ROOT/out/incoming-audio/ringrtc-incoming-audio-arm64.aar"
 cp "${AARS[0]}" "$DEST"
