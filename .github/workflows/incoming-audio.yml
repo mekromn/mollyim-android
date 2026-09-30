@@ -31,6 +31,10 @@ jobs:
           distribution: temurin
           java-version: '21'
       - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+          cmdline-tools-version: 13114758
+          log-accepted-android-sdk-licenses: false
       - name: Prepare ephemeral runner for native compilation
         run: |
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android/sdk/ndk /opt/ghc /usr/local/.ghcup /usr/local/swift
