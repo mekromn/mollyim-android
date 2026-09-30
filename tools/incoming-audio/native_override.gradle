@@ -1,0 +1,28 @@
+// Explicit opt-in replacement; a regular upstream build never pretends to have DSP.
+// Usage: INCOMING_AUDIO_AAR=/absolute/path.aar ./gradlew -I tools/incoming-audio/native_override.gradle ...
+def incomingAar = System.getenv('INCOMING_AUDIO_AAR')
+if (!incomingAar || !new File(incomingAar).isFile()) {
+  throw new GradleException('INCOMING_AUDIO_AAR must point to the verified, patched RingRTC AAR')
+}
+gradle.beforeProject { p ->
+  if (p.path == ':app') {
+    p.afterEvaluate {
+      int replaced = 0
+      p.configurations.each { configuration ->
+        def originals = configuration.dependencies.findAll { dependency ->
+          dependency.group == 'im.molly' && dependency.name == 'ringrtc-android'
+        }
+        originals.each { original ->
+          configuration.dependencies.remove(original)
+          configuration.dependencies.add(p.dependencies.create(p.files(incomingAar)))
+          replaced++
+        }
+      }
+      if (replaced == 0) throw new GradleException('RingRTC dependency not found; refusing an audio-controls-only build')
+      def android = p.extensions.getByName('android')
+      android.defaultConfig.ndk.abiFilters.clear()
+      android.defaultConfig.ndk.abiFilters.add('arm64-v8a')
+      println('Incoming audio: using verified local RingRTC; arm64-v8a packaging only')
+    }
+  }
+}

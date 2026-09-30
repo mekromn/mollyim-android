@@ -1,0 +1,37 @@
+<resources>
+  <string name="incoming_audio_title">Incoming audio</string>
+  <string name="incoming_audio_subtitle">Adjust what you hear. Your microphone stays unchanged.</string>
+  <string name="incoming_audio_enable">Process incoming audio</string>
+  <string name="incoming_audio_bypass">Bypass</string>
+  <string name="incoming_audio_close">Close</string>
+  <string name="incoming_audio_reset">Reset all</string>
+  <string name="incoming_audio_on">On</string>
+  <string name="incoming_audio_off">Off</string>
+  <string name="incoming_audio_active">Receiving audio · %1$d Hz · %2$d channels</string>
+  <string name="incoming_audio_waiting">Waiting for received audio</string>
+  <string name="incoming_audio_unavailable">The incoming-audio engine is not included in this build. These controls need the patched RingRTC library.</string>
+  <string name="incoming_audio_input">Input</string>
+  <string name="incoming_audio_output">Output</string>
+  <string name="incoming_audio_reduction">Compression: %1$s dB · Limiting: %2$s dB</string>
+  <string name="incoming_audio_gain">Gain</string>
+  <string name="incoming_audio_eq">Equalizer</string>
+  <string name="incoming_audio_eq_show">Show 10 bands</string>
+  <string name="incoming_audio_eq_hide">Hide bands</string>
+  <string name="incoming_audio_eq_flat">Flat EQ</string>
+  <string name="incoming_audio_compressor">Compressor</string>
+  <string name="incoming_audio_threshold">Threshold</string>
+  <string name="incoming_audio_ratio">Ratio</string>
+  <string name="incoming_audio_attack">Attack</string>
+  <string name="incoming_audio_release">Release</string>
+  <string name="incoming_audio_knee">Soft knee</string>
+  <string name="incoming_audio_makeup">Makeup gain</string>
+  <string name="incoming_audio_limiter">Limiter</string>
+  <string name="incoming_audio_ceiling">Ceiling</string>
+  <string name="incoming_audio_advanced">Advanced controls</string>
+  <string name="incoming_audio_simple">Fewer controls</string>
+  <string name="incoming_audio_preset_clear">Clear speech</string>
+  <string name="incoming_audio_preset_quiet">Quiet caller</string>
+  <string name="incoming_audio_preset_gentle">Gentle leveling</string>
+  <string name="incoming_audio_note">Gain is separate from your phone volume. The limiter controls digital peaks, not physical listening loudness. Group calls use the combined incoming audio.</string>
+  <string name="incoming_audio_high_band">Unavailable at the current audio sample rate</string>
+</resources>

@@ -1,0 +1,69 @@
+name: Incoming call audio
+on:
+  push:
+    branches: [feature/incoming-call-audio]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: incoming-audio-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  native-tests:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: DSP regression and sanitizer tests
+        run: bash tools/incoming-audio/test_host.sh
+  release-arm64:
+    needs: native-tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    env:
+      BUILD_JOBS: '2'
+      GRADLE_OPTS: -Dorg.gradle.jvmargs=-Xmx5g -Dorg.gradle.workers.max=2
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: android-actions/setup-android@v3
+      - name: Prepare ephemeral runner for native compilation
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android/sdk/ndk /opt/ghc /usr/local/.ghcup /usr/local/swift
+          sudo apt-get update
+          sudo apt-get install -y clang ninja-build cmake protobuf-compiler libglib2.0-dev pkg-config
+          sdkmanager 'ndk;28.0.13004108' 'build-tools;36.0.0' 'platforms;android-36.1'
+          df -h .
+      - name: Build patched RingRTC and verify exported native ABI
+        run: bash tools/incoming-audio/build_native.sh
+      - name: Preserve native build evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: incoming-audio-native-arm64
+          path: out/incoming-audio/
+          if-no-files-found: error
+      - name: Build release APK without changing signing identity
+        env:
+          INCOMING_AUDIO_AAR: ${{ github.workspace }}/out/incoming-audio/ringrtc-incoming-audio-arm64.aar
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon --max-workers=2 -I tools/incoming-audio/native_override.gradle :app:assembleProdStoreRelease
+      - name: Upload release APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: molly-incoming-audio-arm64-unsigned
+          path: app/build/outputs/apk/prodStore/release/*.apk
+          if-no-files-found: error
+      - name: Upload build reports on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: incoming-audio-build-reports
+          path: |
+            app/build/reports/
+            out/incoming-audio/*.json
+            out/incoming-audio/*.txt
