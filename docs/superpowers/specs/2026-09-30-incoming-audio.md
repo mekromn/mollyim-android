@@ -1,0 +1,11 @@
+# Incoming call audio
+
+User-approved scope: local controls for received call audio, accessible from the call screen. Ten-band EQ, compressor, limiter, independent gain, live values, meters, presets and complete bypass. No changes to microphone, transport encryption, recording, network destinations, or other app audio. Combined receive mix for group calls.
+
+Native integration: pinned Molly RingRTC v2.69.5-1 / WebRTC 7778d. Apply DSP at AudioTransportImpl after receive mixing, before ProcessReverseAudioFrame and the device output resampler. This preserves the processed echo reference and both Java/Oboe output backends. Do not replace AEC or force an output backend. Existing transport uses int16 PCM; convert once to float32 for all stages and back at the same rate/channel count. No deliberate resampling or lookahead delay. Limiter is sample-peak, not calibrated hearing protection or a true-peak limiter; subsequent resampling/hardware may change peaks.
+
+Default: complete bypass. EQ ten octave bands 31.25,62.5,125,250,500,1000,2000,4000,8000,16000 Hz, ±12 dB; bypass bands at or above 0.45*sample rate. Compressor threshold -60..0 dBFS, ratio 1..20, attack 0.1..100 ms, release 10..1000 ms, knee 0..24 dB, makeup 0..18 dB. Gain -24..18 dB. Limiter ceiling -24..-0.1 dBFS, release 10..1000 ms. Independent stage switches. Link stereo dynamics; retain channels. Use finite-value validation and clamp all parameters. Master bypass crossfades over 10ms then returns exact original samples. Smooth EQ coefficients and gain. No allocation, mutex acquisition, Java callbacks, network or logs on the audio callback.
+
+Settings use a bounded atomic snapshot. UI persists only numerical settings to private preferences; the controller also loads them for background calls. Meters expose numerical levels only. Native version and actual processed-frame count distinguish an absent backend from active processing. No pretending a stock AAR has DSP.
+
+Build: use a dedicated feature branch and a pinned-source native AAR. Do not change or generate the user's signing key. Produce an unsigned release APK unless configured signing secrets exist. Preserve existing package and version unless explicitly changed. Real device route/echo verification is required before declaring production readiness.

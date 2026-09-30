@@ -69,6 +69,12 @@ fun CallControls(
     verticalArrangement = spacedBy(30.dp),
     modifier = modifier.padding(bottom = bottom)
   ) {
+    if (callControlsState.displayEndCallButton && callControlsState.displayMicToggle) {
+      IncomingAudioControls(
+        onSheetDisplayChanged = callScreenSheetDisplayListener::onAudioDeviceSheetDisplayChanged
+      )
+    }
+
     Row(
       horizontalArrangement = spacedBy(20.dp)
     ) {
