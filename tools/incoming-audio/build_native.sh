@@ -7,6 +7,11 @@ for tool in git python3 rustup java protoc; do command -v "$tool" >/dev/null || 
 : "${ANDROID_HOME:?Set ANDROID_HOME to the Android SDK}"
 export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/28.0.13004108"
 test -d "$ANDROID_NDK_HOME" || { echo "Install NDK 28.0.13004108 first" >&2; exit 1; }
+# gclient cherry-picks Molly's patches in a separate WebRTC checkout.
+# Git needs commit metadata there even though this does not publish any commit.
+export GIT_COMMITTER_NAME="${GIT_COMMITTER_NAME:-Molly native builder}"
+export GIT_COMMITTER_EMAIL="${GIT_COMMITTER_EMAIL:-builder@localhost}"
+export PYTHONUNBUFFERED=1
 if [[ ! -d "$WORK/depot_tools/.git" ]]; then
   git clone --depth 1 https://chromium.googlesource.com/chromium/tools/depot_tools.git "$WORK/depot_tools"
 fi
