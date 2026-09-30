@@ -14,13 +14,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: DSP regression and sanitizer tests
-        run: bash tools/incoming-audio/test_host.sh
+        run: |
+          bash tools/incoming-audio/test_host.sh
+          python3 tools/incoming-audio/test_build_driver.py
   release-arm64:
     needs: native-tests
     runs-on: ubuntu-24.04
     timeout-minutes: 180
     env:
       BUILD_JOBS: '2'
+      INCOMING_AUDIO_WORK: ${{ runner.temp }}/molly-incoming-audio
       GRADLE_OPTS: -Dorg.gradle.jvmargs=-Xmx5g -Dorg.gradle.workers.max=2
     steps:
       - uses: actions/checkout@v4
@@ -58,12 +61,32 @@ jobs:
         with:
           path: out/incoming-audio/
           key: incoming-audio-arm64-v1-${{ hashFiles('native/incoming-audio/**', 'tools/incoming-audio/build_native.sh', 'tools/incoming-audio/patch_ringrtc.py', 'tools/incoming-audio/verify_aar.py') }}
+      - name: Restore prepared WebRTC workspace
+        id: source-cache
+        if: steps.native-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ env.INCOMING_AUDIO_WORK }}
+          key: molly-prepared-ubuntu24-7778d-v1-57d50b8656bfed9e42adf8de1d549ba4229cc909
+      - name: Prepare pinned native workspace
+        if: steps.native-cache.outputs.cache-hit != 'true' && steps.source-cache.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p out/build-logs
+          set -o pipefail
+          bash tools/incoming-audio/build_native.sh prepare 2>&1 | tee out/build-logs/native-prepare.log
+      - name: Cache unmodified prepared workspace before compilation
+        if: steps.native-cache.outputs.cache-hit != 'true' && steps.source-cache.outputs.cache-hit != 'true'
+        continue-on-error: true
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ env.INCOMING_AUDIO_WORK }}
+          key: ${{ steps.source-cache.outputs.cache-primary-key }}
       - name: Build patched RingRTC and verify exported native ABI
         if: steps.native-cache.outputs.cache-hit != 'true'
         run: |
           mkdir -p out/build-logs
           set -o pipefail
-          bash tools/incoming-audio/build_native.sh 2>&1 | tee out/build-logs/native-build.log
+          bash tools/incoming-audio/build_native.sh build 2>&1 | tee out/build-logs/native-build.log
       - name: Verify native artifact before packaging
         run: python3 tools/incoming-audio/verify_aar.py out/incoming-audio/ringrtc-incoming-audio-arm64.aar
       - name: Cache verified native artifact
@@ -78,14 +101,15 @@ jobs:
           name: incoming-audio-native-arm64
           path: out/incoming-audio/
           if-no-files-found: error
-      - name: Build release APK without changing signing identity
+      - uses: gradle/actions/setup-gradle@v6
+      - name: Build coexistence release APK
         env:
           INCOMING_AUDIO_AAR: ${{ github.workspace }}/out/incoming-audio/ringrtc-incoming-audio-arm64.aar
         run: |
           chmod +x gradlew
           mkdir -p out/build-logs
           set -o pipefail
-          ./gradlew --no-daemon --max-workers=2 -I tools/incoming-audio/native_override.gradle :app:assembleProdStoreRelease 2>&1 | tee out/build-logs/app-build.log
+          ./gradlew --no-daemon --max-workers=2 -I tools/incoming-audio/native_override.gradle -PbasePackageId=com.mekromn.mollyaudio -PbaseAppTitle="Molly Audio" -PbaseAppFileName=Molly-Audio :app:assembleProdStoreRelease 2>&1 | tee out/build-logs/app-build.log
       - name: Upload release APK
         uses: actions/upload-artifact@v4
         with:
