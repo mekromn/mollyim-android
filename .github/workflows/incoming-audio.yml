@@ -23,7 +23,7 @@ jobs:
     timeout-minutes: 180
     env:
       BUILD_JOBS: '4'
-      GRADLE_OPTS: -Dorg.gradle.jvmargs=-Xmx5g -Dorg.gradle.workers.max=2
+      GRADLE_OPTS: -Dorg.gradle.workers.max=1
     steps:
       - uses: actions/checkout@v4
         with:
@@ -108,7 +108,17 @@ jobs:
           chmod +x gradlew
           mkdir -p out/build-logs
           set -o pipefail
-          ./gradlew --no-daemon --max-workers=2 -I tools/incoming-audio/native_override.gradle -PbasePackageId=com.mekromn.mollyaudio -PbaseAppTitle="Molly Audio" -PbaseAppFileName=Molly-Audio :app:assembleProdStoreRelease 2>&1 | tee out/build-logs/app-build.log
+          free -h
+          # Isolate lint and R8 in separate JVMs so their analysis graphs cannot coexist.
+          # Keep upstream release optimization and resource shrinking enabled.
+          common=(--no-daemon --no-parallel --max-workers=1
+            '-Dorg.gradle.jvmargs=-Xmx12g -XX:+UseParallelGC -XX:MaxMetaspaceSize=1g'
+            -Pkotlin.compiler.execution.strategy=in-process
+            -I tools/incoming-audio/native_override.gradle
+            -PbasePackageId=com.mekromn.mollyaudio
+            '-PbaseAppTitle=Molly Audio' -PbaseAppFileName=Molly-Audio)
+          ./gradlew "${common[@]}" :app:lintVitalProdStoreRelease 2>&1 | tee out/build-logs/app-lint.log
+          ./gradlew "${common[@]}" :app:assembleProdStoreRelease 2>&1 | tee out/build-logs/app-build.log
       - name: Upload release APK
         uses: actions/upload-artifact@v4
         with:
