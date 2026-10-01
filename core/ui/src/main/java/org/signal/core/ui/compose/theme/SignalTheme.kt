@@ -27,6 +27,7 @@ import androidx.compose.ui.unit.sp
 import org.signal.core.ui.CoreUiDependencies
 import org.signal.core.ui.R
 import org.signal.core.ui.compose.ProvideIncognitoKeyboard
+import org.signal.core.ui.util.ThemeUtil
 
 private val typography = Typography().run {
   copy(
@@ -235,7 +236,9 @@ fun SignalTheme(
   // - API 34+: Use Compose's built-in dynamic scheme (matches system Material You).
   // - API 31–33: Use mapped color resources to approximate system dynamic palette, avoiding Compose's more saturated fallback.
   // - Otherwise: Use app light/dark color schemes.
-  val colorScheme = when {
+  // Explicit light subthemes (e.g. QR codes) remain light and scannable.
+  val amoledBlack = isDarkMode && ThemeUtil.getThemedBoolean(context, R.attr.amoled_black)
+  val baseColorScheme = when {
     dynamicColors -> {
       if (Build.VERSION.SDK_INT >= 34) {
         if (isDarkMode) dynamicDarkColorScheme(context)
@@ -249,7 +252,9 @@ fun SignalTheme(
     else -> lightColorScheme
   }
 
-  val extendedColors = extendedColors(colorScheme, isDarkMode = isDarkMode, isDynamic = dynamicColors)
+  val colorScheme = if (amoledBlack) baseColorScheme.amoledBlackSurfaces() else baseColorScheme
+  val baseExtendedColors = extendedColors(baseColorScheme, isDarkMode = isDarkMode, isDynamic = dynamicColors)
+  val extendedColors = if (amoledBlack) baseExtendedColors.amoledBlackSurfaces() else baseExtendedColors
   val snackbarColors = snackbarColors(colorScheme, isDarkMode = isDarkMode, isDynamic = dynamicColors)
 
   ProvideIncognitoKeyboard(enabled = incognitoKeyboardEnabled) {
@@ -446,6 +451,11 @@ private fun TypographyPreview() {
 }
 
 object SignalTheme {
+  val isAmoledBlack: Boolean
+    @Composable
+    get() = MaterialTheme.colorScheme.surface == Color.Black &&
+      ThemeUtil.getThemedBoolean(LocalContext.current, R.attr.amoled_black)
+
   val colors: ExtendedColors
     @Composable
     get() = LocalExtendedColors.current
