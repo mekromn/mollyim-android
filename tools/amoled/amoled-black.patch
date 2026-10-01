@@ -1,0 +1,391 @@
+diff --git a/app/build.gradle.kts b/app/build.gradle.kts
+index 8a60cd3..25e65b9 100644
+--- a/app/build.gradle.kts
++++ b/app/build.gradle.kts
+@@ -12,7 +12,7 @@ plugins {
+ 
+ val canonicalVersionCode = 1719
+ val canonicalVersionName = "8.19.2"
+-val currentHotfixVersion = 0
++val currentHotfixVersion = 1
+ val maxHotfixVersions = 100
+ val mollyRevision = 4
+ 
+diff --git a/app/src/main/java/org/thoughtcrime/securesms/backup/v2/processor/AccountDataArchiveProcessor.kt b/app/src/main/java/org/thoughtcrime/securesms/backup/v2/processor/AccountDataArchiveProcessor.kt
+index e4288dd..2760f4d 100644
+--- a/app/src/main/java/org/thoughtcrime/securesms/backup/v2/processor/AccountDataArchiveProcessor.kt
++++ b/app/src/main/java/org/thoughtcrime/securesms/backup/v2/processor/AccountDataArchiveProcessor.kt
+@@ -527,7 +527,7 @@ object AccountDataArchiveProcessor {
+     return when (this) {
+       SettingsValues.Theme.SYSTEM -> AccountData.AppTheme.SYSTEM
+       SettingsValues.Theme.LIGHT -> AccountData.AppTheme.LIGHT
+-      SettingsValues.Theme.DARK -> AccountData.AppTheme.DARK
++      SettingsValues.Theme.DARK, SettingsValues.Theme.AMOLED -> AccountData.AppTheme.DARK
+     }
+   }
+ 
+diff --git a/app/src/main/java/org/thoughtcrime/securesms/components/webrtc/v2/IncomingAudioControls.kt b/app/src/main/java/org/thoughtcrime/securesms/components/webrtc/v2/IncomingAudioControls.kt
+index 5d3ca7d..554f56c 100644
+--- a/app/src/main/java/org/thoughtcrime/securesms/components/webrtc/v2/IncomingAudioControls.kt
++++ b/app/src/main/java/org/thoughtcrime/securesms/components/webrtc/v2/IncomingAudioControls.kt
+@@ -2,6 +2,7 @@
+ package org.thoughtcrime.securesms.components.webrtc.v2
+ 
+ import android.os.SystemClock
++import androidx.compose.foundation.BorderStroke
+ import androidx.compose.foundation.horizontalScroll
+ import androidx.compose.foundation.layout.Arrangement
+ import androidx.compose.foundation.layout.Column
+@@ -47,6 +48,7 @@ import androidx.compose.ui.res.stringResource
+ import androidx.compose.ui.unit.dp
+ import kotlinx.coroutines.delay
+ import kotlinx.coroutines.isActive
++import org.signal.core.ui.compose.theme.SignalTheme
+ import org.thoughtcrime.securesms.R
+ import org.thoughtcrime.securesms.webrtc.audio.IncomingAudioBridge
+ import org.thoughtcrime.securesms.webrtc.audio.IncomingAudioController
+@@ -192,7 +194,12 @@ private fun IncomingAudioSheet(settings: IncomingAudioSettings, onDismiss: () ->
+ 
+ @Composable
+ private fun AudioSection(title: String, checked: Boolean, enabled: Boolean, onChecked: (Boolean) -> Unit, content: @Composable () -> Unit) {
+-  Surface(shape = RoundedCornerShape(20.dp), tonalElevation = 2.dp, modifier = Modifier.fillMaxWidth()) {
++  Surface(
++    shape = RoundedCornerShape(20.dp),
++    tonalElevation = 2.dp,
++    border = if (SignalTheme.isAmoledBlack) BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant) else null,
++    modifier = Modifier.fillMaxWidth()
++  ) {
+     Column(Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) {
+       Row(verticalAlignment = Alignment.CenterVertically) {
+         Text(title, modifier = Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
+diff --git a/app/src/main/java/org/thoughtcrime/securesms/keyvalue/SettingsValues.java b/app/src/main/java/org/thoughtcrime/securesms/keyvalue/SettingsValues.java
+index 7d0c4cf..fd8c82d 100644
+--- a/app/src/main/java/org/thoughtcrime/securesms/keyvalue/SettingsValues.java
++++ b/app/src/main/java/org/thoughtcrime/securesms/keyvalue/SettingsValues.java
+@@ -628,7 +628,7 @@ public final class SettingsValues extends SignalStoreValues {
+   }
+ 
+   public enum Theme {
+-    SYSTEM("system"), LIGHT("light"), DARK("dark");
++    SYSTEM("system"), LIGHT("light"), DARK("dark"), AMOLED("amoled");
+ 
+     private final String value;
+ 
+@@ -648,6 +648,8 @@ public final class SettingsValues extends SignalStoreValues {
+           return LIGHT;
+         case "dark":
+           return DARK;
++        case "amoled":
++          return AMOLED;
+         default:
+           throw new IllegalArgumentException("Unrecognized value " + value);
+       }
+diff --git a/app/src/main/java/org/thoughtcrime/securesms/util/DynamicTheme.java b/app/src/main/java/org/thoughtcrime/securesms/util/DynamicTheme.java
+index eadea80..fc6ff2e 100644
+--- a/app/src/main/java/org/thoughtcrime/securesms/util/DynamicTheme.java
++++ b/app/src/main/java/org/thoughtcrime/securesms/util/DynamicTheme.java
+@@ -26,25 +26,38 @@ public class DynamicTheme {
+   private static int globalNightModeConfiguration;
+ 
+   private int onCreateNightModeConfiguration;
++  private boolean onCreateAmoledBlack;
++  private static boolean globalAmoledBlack;
+ 
+   private static final int regularTheme = R.style.Signal_DayNight;
+   private static final int dynamicTheme = R.style.Theme_Molly_Dynamic;
+ 
+   public void onCreate(@NonNull Activity activity) {
+     int previousGlobalConfiguration = globalNightModeConfiguration;
++    boolean previousAmoledBlack = globalAmoledBlack;
++    onCreateAmoledBlack = isAmoledBlack(activity);
++    globalAmoledBlack = onCreateAmoledBlack;
+ 
+     onCreateNightModeConfiguration = ConfigurationUtil.getNightModeConfiguration(activity);
+     globalNightModeConfiguration   = onCreateNightModeConfiguration;
+ 
+     activity.setTheme(getTheme(activity));
++    applyAmoledOverlay(activity);
+ 
+-    if (previousGlobalConfiguration != globalNightModeConfiguration) {
++    if (previousGlobalConfiguration != globalNightModeConfiguration || previousAmoledBlack != globalAmoledBlack) {
+       Log.d(TAG, "Previous night mode has changed previous: " + previousGlobalConfiguration + " now: " + globalNightModeConfiguration);
+       CachedInflater.from(activity).clear();
+     }
+   }
+ 
+   public void onResume(@NonNull Activity activity) {
++    // DARK <-> AMOLED keeps the same Android night mode. Refresh returning
++    // activities as well, rather than leaving cached gray/black views behind.
++    if (onCreateAmoledBlack != isAmoledBlack(activity)) {
++      CachedInflater.from(activity).clear();
++      activity.recreate();
++      return;
++    }
+     if (onCreateNightModeConfiguration != ConfigurationUtil.getNightModeConfiguration(activity)) {
+       Log.d(TAG, "Create configuration different from current previous: " + onCreateNightModeConfiguration + " now: " + ConfigurationUtil.getNightModeConfiguration(activity));
+       CachedInflater.from(activity).clear();
+@@ -74,6 +87,7 @@ public class DynamicTheme {
+   public static @ColorInt int resolveColor(@NonNull Context context, int colorRef) {
+     int resId = useDynamicColors(context) ? dynamicTheme : regularTheme;
+     ContextThemeWrapper themeWrapper = new ContextThemeWrapper(context, resId);
++    applyAmoledOverlay(themeWrapper);
+     return ThemeUtil.getThemedColor(context, colorRef, themeWrapper.getTheme());
+   }
+ 
+@@ -107,7 +121,20 @@ public class DynamicTheme {
+     if (theme == Theme.SYSTEM && systemThemeAvailable()) {
+       return isSystemInDarkTheme(context);
+     } else {
+-      return theme == Theme.DARK;
++      return theme == Theme.DARK || theme == Theme.AMOLED;
++    }
++  }
++
++  public static boolean isAmoledBlack(@NonNull Context context) {
++    // Unencrypted appearance preference is also available while Molly is locked.
++    return Theme.deserialize(TextSecurePreferences.getTheme(context)) == Theme.AMOLED;
++  }
++
++  public static void applyAmoledOverlay(@NonNull Context context) {
++    if (isAmoledBlack(context)) {
++      context.getTheme().applyStyle(useDynamicColors(context)
++          ? R.style.ThemeOverlay_Molly_Amoled_Dynamic
++          : R.style.ThemeOverlay_Molly_Amoled, true);
+     }
+   }
+ 
+diff --git a/app/src/main/java/org/thoughtcrime/securesms/util/SplashScreenUtil.java b/app/src/main/java/org/thoughtcrime/securesms/util/SplashScreenUtil.java
+index ca841fe..4c47bc3 100644
+--- a/app/src/main/java/org/thoughtcrime/securesms/util/SplashScreenUtil.java
++++ b/app/src/main/java/org/thoughtcrime/securesms/util/SplashScreenUtil.java
+@@ -28,6 +28,9 @@ public final class SplashScreenUtil {
+       case DARK:
+         activity.getSplashScreen().setSplashScreenTheme(R.style.Theme_Molly_Starting_Dark);
+         break;
++      case AMOLED:
++        activity.getSplashScreen().setSplashScreenTheme(R.style.Theme_Molly_Starting_Amoled);
++        break;
+       case SYSTEM:
+         activity.getSplashScreen().setSplashScreenTheme(Resources.ID_NULL);
+         break;
+diff --git a/app/src/main/res/values-v29/arrays.xml b/app/src/main/res/values-v29/arrays.xml
+index b1d098c..8eb15e7 100644
+--- a/app/src/main/res/values-v29/arrays.xml
++++ b/app/src/main/res/values-v29/arrays.xml
+@@ -5,12 +5,14 @@
+     <item>@string/preferences__follow_system</item>
+     <item>@string/preferences__light_theme</item>
+     <item>@string/preferences__dark_theme</item>
++    <item>@string/preferences__amoled_black_theme</item>
+   </string-array>
+ 
+   <string-array name="pref_theme_values" translatable="false" tools:ignore="InconsistentArrays">
+     <item>system</item>
+     <item>light</item>
+     <item>dark</item>
++    <item>amoled</item>
+   </string-array>
+ 
+ </resources>
+diff --git a/app/src/main/res/values-v31/amoled_theme.xml b/app/src/main/res/values-v31/amoled_theme.xml
+new file mode 100644
+index 0000000..4336413
+--- /dev/null
++++ b/app/src/main/res/values-v31/amoled_theme.xml
+@@ -0,0 +1,7 @@
++<?xml version="1.0" encoding="utf-8"?>
++<resources>
++    <style name="ThemeOverlay.Molly.Amoled.Dynamic" parent="ThemeOverlay.Molly.Amoled">
++        <!-- Do not turn received-message bubbles black with the surface override. -->
++        <item name="conversation_item_recv_bubble_color_normal">@color/dynamic_surface_container_high_dark</item>
++    </style>
++</resources>
+diff --git a/app/src/main/res/values/amoled_theme.xml b/app/src/main/res/values/amoled_theme.xml
+new file mode 100644
+index 0000000..cb25200
+--- /dev/null
++++ b/app/src/main/res/values/amoled_theme.xml
+@@ -0,0 +1,52 @@
++<?xml version="1.0" encoding="utf-8"?>
++<resources xmlns:tools="http://schemas.android.com/tools">
++    <string name="preferences__amoled_black_theme">AMOLED Black</string>
++
++    <!-- Applied over the selected dark palette, not a replacement for accent colors.
++         Keep surfaceVariant for small controls/disabled tracks and preserve chat bubbles. -->
++    <style name="ThemeOverlay.Molly.Amoled" parent="">
++        <item name="amoled_black">true</item>
++        <item name="colorSurface">@android:color/black</item>
++        <item name="colorSurfaceDim">@android:color/black</item>
++        <item name="colorSurfaceBright">@android:color/black</item>
++        <item name="colorSurfaceContainerLowest">@android:color/black</item>
++        <item name="colorSurfaceContainerLow">@android:color/black</item>
++        <item name="colorSurfaceContainer">@android:color/black</item>
++        <item name="colorSurfaceContainerHigh">@android:color/black</item>
++        <item name="colorSurfaceContainerHighest">@android:color/black</item>
++        <item name="android:colorBackground">@android:color/black</item>
++        <item name="android:windowBackground">@android:color/black</item>
++        <item name="android:statusBarColor">@android:color/black</item>
++        <item name="android:navigationBarColor">@android:color/black</item>
++        <item name="android:windowLightStatusBar">false</item>
++        <item name="android:windowLightNavigationBar">false</item>
++        <item name="android:enforceStatusBarContrast" tools:targetApi="29">false</item>
++        <item name="android:enforceNavigationBarContrast" tools:targetApi="29">false</item>
++        <item name="elevationOverlayEnabled">false</item>
++        <item name="elevationOverlayColor">@android:color/black</item>
++        <item name="navbar_container_color">@android:color/black</item>
++        <item name="context_menu_container_color">@android:color/black</item>
++        <item name="message_request_bar_background_normal">@android:color/black</item>
++        <item name="conversation_item_recv_bubble_color_normal">@color/molly_surface_container_high_dark</item>
++        <item name="bottomSheetDialogTheme">@style/ThemeOverlay.Molly.Amoled.BottomSheet</item>
++    </style>
++
++    <!-- Fallback exists on API 27-30; the dynamic version is selected only on API 31+. -->
++    <style name="ThemeOverlay.Molly.Amoled.Dynamic" parent="ThemeOverlay.Molly.Amoled" />
++
++    <style name="ThemeOverlay.Molly.Amoled.BottomSheet" parent="ThemeOverlay.Material3.BottomSheetDialog">
++        <item name="amoled_black">true</item>
++        <item name="colorSurface">@android:color/black</item>
++        <item name="colorSurfaceContainerLow">@android:color/black</item>
++        <item name="colorSurfaceContainer">@android:color/black</item>
++        <item name="colorSurfaceContainerHigh">@android:color/black</item>
++        <item name="elevationOverlayEnabled">false</item>
++        <item name="android:navigationBarColor">@android:color/black</item>
++        <item name="android:windowLightNavigationBar">false</item>
++        <item name="android:enforceNavigationBarContrast" tools:targetApi="29">false</item>
++    </style>
++
++    <style name="Theme.Molly.Starting.Amoled" parent="Theme.Molly.Starting.Dark">
++        <item name="windowSplashScreenBackground">@android:color/black</item>
++    </style>
++</resources>
+diff --git a/app/src/main/res/values/arrays.xml b/app/src/main/res/values/arrays.xml
+index 34a5d8b..085473a 100644
+--- a/app/src/main/res/values/arrays.xml
++++ b/app/src/main/res/values/arrays.xml
+@@ -154,11 +154,13 @@
+   <string-array name="pref_theme_entries" tools:ignore="InconsistentArrays">
+       <item>@string/preferences__light_theme</item>
+       <item>@string/preferences__dark_theme</item>
++      <item>@string/preferences__amoled_black_theme</item>
+   </string-array>
+ 
+   <string-array name="pref_theme_values" translatable="false" tools:ignore="InconsistentArrays">
+       <item>light</item>
+       <item>dark</item>
++      <item>amoled</item>
+   </string-array>
+ 
+   <string-array name="pref_led_color_entries">
+diff --git a/core/ui/src/main/java/org/signal/core/ui/compose/Dialogs.kt b/core/ui/src/main/java/org/signal/core/ui/compose/Dialogs.kt
+index 8a84dd7..6166b2c 100644
+--- a/core/ui/src/main/java/org/signal/core/ui/compose/Dialogs.kt
++++ b/core/ui/src/main/java/org/signal/core/ui/compose/Dialogs.kt
+@@ -7,6 +7,7 @@ package org.signal.core.ui.compose
+ 
+ import android.R
+ import androidx.compose.foundation.background
++import androidx.compose.foundation.border
+ import androidx.compose.foundation.clickable
+ import androidx.compose.foundation.layout.Arrangement
+ import androidx.compose.foundation.layout.Box
+@@ -104,7 +105,7 @@ object Dialogs {
+     AlertDialog(
+       onDismissRequest = onDismissRequest,
+       confirmButton = confirmButton,
+-      modifier = modifier,
++      modifier = if (SignalTheme.isAmoledBlack) modifier.border(1.dp, MaterialTheme.colorScheme.outlineVariant, shape) else modifier,
+       dismissButton = dismissButton,
+       icon = icon,
+       title = title,
+diff --git a/core/ui/src/main/java/org/signal/core/ui/compose/theme/AmoledPalette.kt b/core/ui/src/main/java/org/signal/core/ui/compose/theme/AmoledPalette.kt
+new file mode 100644
+index 0000000..6a22358
+--- /dev/null
++++ b/core/ui/src/main/java/org/signal/core/ui/compose/theme/AmoledPalette.kt
+@@ -0,0 +1,28 @@
++/* SPDX-License-Identifier: AGPL-3.0-only */
++package org.signal.core.ui.compose.theme
++
++import androidx.compose.material3.ColorScheme
++import androidx.compose.ui.graphics.Color
++
++/** Only background surfaces change; accents, text, errors and control fills retain
++ * their original palette. Black surfaceTint prevents elevation from tinting black. */
++internal fun ColorScheme.amoledBlackSurfaces(): ColorScheme = copy(
++  background = Color.Black,
++  surface = Color.Black,
++  surfaceDim = Color.Black,
++  surfaceBright = Color.Black,
++  surfaceContainerLowest = Color.Black,
++  surfaceContainerLow = Color.Black,
++  surfaceContainer = Color.Black,
++  surfaceContainerHigh = Color.Black,
++  surfaceContainerHighest = Color.Black,
++  surfaceTint = Color.Black
++)
++
++internal fun ExtendedColors.amoledBlackSurfaces(): ExtendedColors = copy(
++  colorSurface1 = Color.Black,
++  colorSurface2 = Color.Black,
++  colorSurface3 = Color.Black,
++  colorSurface4 = Color.Black,
++  colorSurface5 = Color.Black
++)
+diff --git a/core/ui/src/main/java/org/signal/core/ui/compose/theme/SignalTheme.kt b/core/ui/src/main/java/org/signal/core/ui/compose/theme/SignalTheme.kt
+index 6911382..8f24c64 100644
+--- a/core/ui/src/main/java/org/signal/core/ui/compose/theme/SignalTheme.kt
++++ b/core/ui/src/main/java/org/signal/core/ui/compose/theme/SignalTheme.kt
+@@ -27,6 +27,7 @@ import androidx.compose.ui.unit.sp
+ import org.signal.core.ui.CoreUiDependencies
+ import org.signal.core.ui.R
+ import org.signal.core.ui.compose.ProvideIncognitoKeyboard
++import org.signal.core.ui.util.ThemeUtil
+ 
+ private val typography = Typography().run {
+   copy(
+@@ -235,7 +236,9 @@ fun SignalTheme(
+   // - API 34+: Use Compose's built-in dynamic scheme (matches system Material You).
+   // - API 31–33: Use mapped color resources to approximate system dynamic palette, avoiding Compose's more saturated fallback.
+   // - Otherwise: Use app light/dark color schemes.
+-  val colorScheme = when {
++  // Explicit light subthemes (e.g. QR codes) remain light and scannable.
++  val amoledBlack = isDarkMode && ThemeUtil.getThemedBoolean(context, R.attr.amoled_black)
++  val baseColorScheme = when {
+     dynamicColors -> {
+       if (Build.VERSION.SDK_INT >= 34) {
+         if (isDarkMode) dynamicDarkColorScheme(context)
+@@ -249,7 +252,9 @@ fun SignalTheme(
+     else -> lightColorScheme
+   }
+ 
+-  val extendedColors = extendedColors(colorScheme, isDarkMode = isDarkMode, isDynamic = dynamicColors)
++  val colorScheme = if (amoledBlack) baseColorScheme.amoledBlackSurfaces() else baseColorScheme
++  val baseExtendedColors = extendedColors(baseColorScheme, isDarkMode = isDarkMode, isDynamic = dynamicColors)
++  val extendedColors = if (amoledBlack) baseExtendedColors.amoledBlackSurfaces() else baseExtendedColors
+   val snackbarColors = snackbarColors(colorScheme, isDarkMode = isDarkMode, isDynamic = dynamicColors)
+ 
+   ProvideIncognitoKeyboard(enabled = incognitoKeyboardEnabled) {
+@@ -446,6 +451,11 @@ private fun TypographyPreview() {
+ }
+ 
+ object SignalTheme {
++  val isAmoledBlack: Boolean
++    @Composable
++    get() = MaterialTheme.colorScheme.surface == Color.Black &&
++      ThemeUtil.getThemedBoolean(LocalContext.current, R.attr.amoled_black)
++
+   val colors: ExtendedColors
+     @Composable
+     get() = LocalExtendedColors.current
+diff --git a/core/ui/src/main/res/values/attrs.xml b/core/ui/src/main/res/values/attrs.xml
+index 4c9bb52..edb95e2 100644
+--- a/core/ui/src/main/res/values/attrs.xml
++++ b/core/ui/src/main/res/values/attrs.xml
+@@ -2,6 +2,7 @@
+ <resources>
+     <attr name="theme_type" format="string"/>
+     <attr name="dynamic_colors" format="boolean"/>
++    <attr name="amoled_black" format="boolean"/>
+     <attr name="extended_action_button_container_color" format="color"/>
+     <attr name="extended_action_button_icon_color" format="color"/>
+     <attr name="filled_tonal_icon_button_container_color" format="color"/>
