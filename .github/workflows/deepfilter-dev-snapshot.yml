@@ -1,0 +1,34 @@
+name: DeepFilterNet development snapshot
+on:
+  push:
+    branches: [feature/deepfilternet-calls]
+    paths: ['.github/workflows/deepfilter-dev-snapshot.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  snapshot:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 20
+      - name: Export tracked source and history
+        run: |
+          mkdir -p out/dev-snapshot
+          git archive --format=tar.gz HEAD > out/dev-snapshot/source.tar.gz
+          git rev-parse HEAD > out/dev-snapshot/revision.txt
+          git log -20 --format='%H %s' > out/dev-snapshot/history.txt
+          git diff b89c53117079099de3c910e27702046d3a74a279 HEAD --stat > out/dev-snapshot/change-summary.txt
+          sha256sum out/dev-snapshot/source.tar.gz > out/dev-snapshot/source.sha256
+      - name: Export pinned WebRTC source for converter tests
+        run: |
+          git clone --filter=blob:none --depth 1 --branch 7778d https://github.com/mollyim/webrtc.git "$RUNNER_TEMP/webrtc-audit"
+          git -C "$RUNNER_TEMP/webrtc-audit" archive --format=tar.gz HEAD common_audio api/audio audio rtc_base system_wrappers absl_types.h > out/dev-snapshot/webrtc-source.tar.gz
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: deepfilter-dev-source
+          path: out/dev-snapshot/
+          if-no-files-found: error
