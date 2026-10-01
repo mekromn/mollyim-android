@@ -25,7 +25,11 @@ jobs:
       - name: Export pinned WebRTC source for converter tests
         run: |
           git clone --filter=blob:none --depth 1 --branch 7778d https://github.com/mollyim/webrtc.git "$RUNNER_TEMP/webrtc-audit"
-          git -C "$RUNNER_TEMP/webrtc-audit" archive --format=tar.gz HEAD common_audio api/audio audio rtc_base system_wrappers absl_types.h > out/dev-snapshot/webrtc-source.tar.gz
+          test "$(git -C "$RUNNER_TEMP/webrtc-audit" rev-parse HEAD)" = 63074e7b349aff7cc6d7ff46d4f1dd3101077242
+          git -C "$RUNNER_TEMP/webrtc-audit" archive --format=tar.gz HEAD common_audio api/audio audio rtc_base system_wrappers > "$RUNNER_TEMP/webrtc-source.tar.gz"
+          tar -tzf "$RUNNER_TEMP/webrtc-source.tar.gz" > /dev/null
+          mv "$RUNNER_TEMP/webrtc-source.tar.gz" out/dev-snapshot/
+          sha256sum out/dev-snapshot/webrtc-source.tar.gz > out/dev-snapshot/webrtc-source.sha256
       - uses: actions/upload-artifact@v4
         if: always()
         with:
