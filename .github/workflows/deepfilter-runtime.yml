@@ -5,7 +5,8 @@ on:
     paths: ['native/deepfilter-runtime/**', 'tools/deepfilter/**', '.github/workflows/deepfilter-runtime.yml']
   workflow_dispatch:
 permissions:
-  contents: read
+  contents: write
+  actions: read
 concurrency:
   group: deepfilter-runtime-${{ github.ref }}
   cancel-in-progress: false
@@ -20,6 +21,8 @@ jobs:
       DF_TEST_FIXTURE: ${{ github.workspace }}/out/deepfilter-inputs/fixtures/noisy_snr0.wav
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
       - name: Install pinned Rust toolchain
         run: rustup toolchain install 1.88.0 --profile minimal
       - uses: actions/cache/restore@v4
@@ -34,11 +37,11 @@ jobs:
         run: |
           python3 tools/deepfilter/prepare_models.py --output out/deepfilter-inputs/models
           python3 tools/deepfilter/prepare_test_inputs.py --output out/deepfilter-inputs/fixtures
-      - name: Resolve exact dependency lock
+      - name: Verify exact dependency lock
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
-          if [ ! -f native/deepfilter-runtime/Cargo.lock ]; then
-            cargo +1.88.0 generate-lockfile --manifest-path native/deepfilter-runtime/Cargo.toml
-          fi
+          python3 tools/deepfilter/restore_runtime_lock.py
           mkdir -p out/runtime
           cp native/deepfilter-runtime/Cargo.lock out/runtime/
           cargo +1.88.0 metadata --locked --manifest-path native/deepfilter-runtime/Cargo.toml --format-version=1 > out/runtime/dependencies.json
@@ -52,6 +55,16 @@ jobs:
           cp native/deepfilter-runtime/target/release/libmolly_deepfilter.so out/runtime/
           git rev-parse HEAD > out/runtime/source-revision.txt
           sha256sum out/runtime/libmolly_deepfilter.so > out/runtime/library.sha256
+      - name: Commit tested dependency lock on feature branch only
+        if: github.ref == 'refs/heads/feature/deepfilternet-calls'
+        run: |
+          git config user.name 'Molly Audio native builder'
+          git config user.email 'builder@localhost'
+          git add native/deepfilter-runtime/Cargo.lock
+          if ! git diff --cached --quiet; then
+            git commit -m 'build: pin tested DeepFilterNet native dependency lock'
+            git push origin HEAD:feature/deepfilternet-calls
+          fi
       - name: Cache dependency compilation even after red tests
         if: always() && steps.cargo-cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@v4
