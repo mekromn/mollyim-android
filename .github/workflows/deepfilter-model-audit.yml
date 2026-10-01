@@ -1,0 +1,71 @@
+name: DeepFilterNet model metadata audit
+on:
+  push:
+    branches: [research/deepfilter-model-audit]
+    paths: [.github/workflows/deepfilter-model-audit.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - name: Inspect pinned public models without building the app
+        run: |
+          python3 - <<'PY'
+          import configparser
+          import hashlib
+          import io
+          import json
+          from pathlib import Path
+          import tarfile
+          from urllib.request import urlopen
+          
+          REV = 'd375b2d8309e0935d165700c91da9de862a99c31'
+          BASE = f'https://raw.githubusercontent.com/Rikorose/DeepFilterNet/{REV}/'
+          OUT = Path('audit')
+          OUT.mkdir(exist_ok=True)
+          models = [
+              ('standard', 'models/DeepFilterNet3_onnx.tar.gz', '1c4f4ffe1015fbb4541433cf291234ca32338871'),
+              ('low_latency', 'models/DeepFilterNet3_ll_onnx.tar.gz', 'f30e825f523c4ef52e54aa3706bbee100cd6f719'),
+          ]
+          report = {'source_revision': REV, 'kind': 'archive inspection only; no inference or device benchmark', 'models': []}
+          for model_id, path, expected in models:
+              with urlopen(BASE + path, timeout=90) as response:
+                  data = response.read(64 * 1024 * 1024 + 1)
+              assert len(data) <= 64 * 1024 * 1024, 'Archive exceeds inspection size limit'
+              blob_sha = hashlib.sha1(f'blob {len(data)}\0'.encode() + data).hexdigest()
+              assert blob_sha == expected, f'Pinned blob mismatch: {model_id}'
+              item = {'id': model_id, 'source_path': path, 'bytes': len(data), 'git_blob_sha1': blob_sha,
+                      'sha256': hashlib.sha256(data).hexdigest(), 'members': []}
+              with tarfile.open(fileobj=io.BytesIO(data), mode='r:gz') as archive:
+                  configs = []
+                  for member in archive.getmembers():
+                      if not member.isfile():
+                          continue
+                      assert member.size <= 100 * 1024 * 1024, 'Member too large'
+                      payload = archive.extractfile(member).read()
+                      item['members'].append({'path': member.name, 'bytes': len(payload),
+                                              'sha256': hashlib.sha256(payload).hexdigest()})
+                      if member.name.endswith('config.ini'):
+                          text = payload.decode('utf-8')
+                          cp = configparser.ConfigParser()
+                          cp.read_string(text)
+                          item['configuration'] = {s: dict(cp[s]) for s in cp.sections()}
+                          (OUT / f'{model_id}-config.ini').write_text(text)
+                          configs.append(member.name)
+                  assert len(configs) == 1, 'Require exactly one configuration'
+              report['models'].append(item)
+          for path in ['libDF/src/tract.rs', 'libDF/src/lib.rs', 'libDF/src/bin/enhance_wav.rs', 'libDF/Cargo.toml', 'Cargo.toml', 'LICENSE-MIT', 'LICENSE-APACHE']:
+              with urlopen(BASE + path, timeout=60) as response:
+                  payload = response.read(1024 * 1024)
+              (OUT / path.replace('/', '__')).write_bytes(payload)
+          (OUT / 'model-audit.json').write_text(json.dumps(report, indent=2) + '\n')
+          print(json.dumps(report, indent=2))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: deepfilter-model-metadata
+          path: audit/
+          if-no-files-found: error
