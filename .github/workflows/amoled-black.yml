@@ -1,0 +1,25 @@
+name: Molly Audio AMOLED
+on:
+  push:
+    branches: [feature/amoled-black]
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: amoled-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  source-and-tests:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Export exact public source for local regression work
+        run: git archive --format=tar.gz -o /tmp/molly-audio-source.tar.gz HEAD
+      - uses: actions/upload-artifact@v4
+        with:
+          name: molly-audio-source
+          path: /tmp/molly-audio-source.tar.gz
+          if-no-files-found: error
+      - name: Verify existing audio DSP
+        run: bash tools/incoming-audio/test_host.sh
