@@ -1,0 +1,47 @@
+name: DeepFilterNet pinned integration sources
+on:
+  push:
+    branches: [feature/deepfilternet-calls]
+    paths: ['.github/workflows/deepfilter-sources.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  export:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Read pinned integration and converter source files
+        run: |
+          python3 - <<'PY'
+          import hashlib,json,urllib.request
+          from pathlib import Path
+          roots={
+            ('mollyim/webrtc','7778d'):[
+              'audio/audio_transport_impl.h','audio/audio_transport_impl.cc','audio/BUILD.gn',
+              'api/audio/audio_frame.h','api/audio/audio_frame.cc','api/audio/audio_view.h',
+              'common_audio/resampler/push_sinc_resampler.h','common_audio/resampler/push_sinc_resampler.cc',
+              'common_audio/resampler/sinc_resampler.h','common_audio/resampler/sinc_resampler.cc',
+              'common_audio/resampler/sinc_resampler_sse.cc','common_audio/resampler/sinc_resampler_avx2.cc','common_audio/resampler/sinc_resampler_neon.cc',
+              'rtc_base/memory/aligned_malloc.h','rtc_base/memory/aligned_malloc.cc','rtc_base/system/arch.h',
+              'rtc_base/system/rtc_export.h','rtc_base/checks.h','rtc_base/gunit.h','api/array_view.h'],
+            ('mollyim/ringrtc','v2.69.5-1'):[
+              'src/android/api/org/signal/ringrtc/CallManager.java','src/android/api/org/signal/ringrtc/GroupCall.java',
+              'src/rust/src/android/api/jni_call_manager.rs','src/rust/src/lib.rs','src/rust/Cargo.toml','bin/build-aar.py']
+          }
+          manifest=[]
+          for (repo,ref),files in roots.items():
+            for file in files:
+              url=f'https://raw.githubusercontent.com/{repo}/{ref}/{file}'
+              with urllib.request.urlopen(url,timeout=60) as r: data=r.read(2*1024*1024)
+              dest=Path('out/sources')/repo.split('/')[1]/file
+              dest.parent.mkdir(parents=True,exist_ok=True);dest.write_bytes(data)
+              manifest.append({'repository':repo,'ref':ref,'path':file,'bytes':len(data),'sha256':hashlib.sha256(data).hexdigest()})
+          Path('out/sources/manifest.json').write_text(json.dumps(manifest,indent=2))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: deepfilter-pinned-sources
+          path: out/sources/
+          if-no-files-found: error
