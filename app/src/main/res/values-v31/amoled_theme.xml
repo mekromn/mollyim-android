@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="ThemeOverlay.Molly.Amoled.Dynamic" parent="ThemeOverlay.Molly.Amoled">
+        <!-- Do not turn received-message bubbles black with the surface override. -->
+        <item name="conversation_item_recv_bubble_color_normal">@color/dynamic_surface_container_high_dark</item>
+    </style>
+</resources>

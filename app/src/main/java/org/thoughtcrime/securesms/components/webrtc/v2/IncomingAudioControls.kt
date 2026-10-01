@@ -2,6 +2,7 @@
 package org.thoughtcrime.securesms.components.webrtc.v2
 
 import android.os.SystemClock
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -47,6 +48,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
+import org.signal.core.ui.compose.theme.SignalTheme
 import org.thoughtcrime.securesms.R
 import org.thoughtcrime.securesms.webrtc.audio.IncomingAudioBridge
 import org.thoughtcrime.securesms.webrtc.audio.IncomingAudioController
@@ -192,7 +194,12 @@ private fun IncomingAudioSheet(settings: IncomingAudioSettings, onDismiss: () ->
 
 @Composable
 private fun AudioSection(title: String, checked: Boolean, enabled: Boolean, onChecked: (Boolean) -> Unit, content: @Composable () -> Unit) {
-  Surface(shape = RoundedCornerShape(20.dp), tonalElevation = 2.dp, modifier = Modifier.fillMaxWidth()) {
+  Surface(
+    shape = RoundedCornerShape(20.dp),
+    tonalElevation = 2.dp,
+    border = if (SignalTheme.isAmoledBlack) BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant) else null,
+    modifier = Modifier.fillMaxWidth()
+  ) {
     Column(Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) {
       Row(verticalAlignment = Alignment.CenterVertically) {
         Text(title, modifier = Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)

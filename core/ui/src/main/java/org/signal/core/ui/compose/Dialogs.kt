@@ -7,6 +7,7 @@ package org.signal.core.ui.compose
 
 import android.R
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -104,7 +105,7 @@ object Dialogs {
     AlertDialog(
       onDismissRequest = onDismissRequest,
       confirmButton = confirmButton,
-      modifier = modifier,
+      modifier = if (SignalTheme.isAmoledBlack) modifier.border(1.dp, MaterialTheme.colorScheme.outlineVariant, shape) else modifier,
       dismissButton = dismissButton,
       icon = icon,
       title = title,

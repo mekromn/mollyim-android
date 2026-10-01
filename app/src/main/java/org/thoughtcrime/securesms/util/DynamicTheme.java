@@ -26,25 +26,38 @@ public class DynamicTheme {
   private static int globalNightModeConfiguration;
 
   private int onCreateNightModeConfiguration;
+  private boolean onCreateAmoledBlack;
+  private static boolean globalAmoledBlack;
 
   private static final int regularTheme = R.style.Signal_DayNight;
   private static final int dynamicTheme = R.style.Theme_Molly_Dynamic;
 
   public void onCreate(@NonNull Activity activity) {
     int previousGlobalConfiguration = globalNightModeConfiguration;
+    boolean previousAmoledBlack = globalAmoledBlack;
+    onCreateAmoledBlack = isAmoledBlack(activity);
+    globalAmoledBlack = onCreateAmoledBlack;
 
     onCreateNightModeConfiguration = ConfigurationUtil.getNightModeConfiguration(activity);
     globalNightModeConfiguration   = onCreateNightModeConfiguration;
 
     activity.setTheme(getTheme(activity));
+    applyAmoledOverlay(activity);
 
-    if (previousGlobalConfiguration != globalNightModeConfiguration) {
+    if (previousGlobalConfiguration != globalNightModeConfiguration || previousAmoledBlack != globalAmoledBlack) {
       Log.d(TAG, "Previous night mode has changed previous: " + previousGlobalConfiguration + " now: " + globalNightModeConfiguration);
       CachedInflater.from(activity).clear();
     }
   }
 
   public void onResume(@NonNull Activity activity) {
+    // DARK <-> AMOLED keeps the same Android night mode. Refresh returning
+    // activities as well, rather than leaving cached gray/black views behind.
+    if (onCreateAmoledBlack != isAmoledBlack(activity)) {
+      CachedInflater.from(activity).clear();
+      activity.recreate();
+      return;
+    }
     if (onCreateNightModeConfiguration != ConfigurationUtil.getNightModeConfiguration(activity)) {
       Log.d(TAG, "Create configuration different from current previous: " + onCreateNightModeConfiguration + " now: " + ConfigurationUtil.getNightModeConfiguration(activity));
       CachedInflater.from(activity).clear();
@@ -74,6 +87,7 @@ public class DynamicTheme {
   public static @ColorInt int resolveColor(@NonNull Context context, int colorRef) {
     int resId = useDynamicColors(context) ? dynamicTheme : regularTheme;
     ContextThemeWrapper themeWrapper = new ContextThemeWrapper(context, resId);
+    applyAmoledOverlay(themeWrapper);
     return ThemeUtil.getThemedColor(context, colorRef, themeWrapper.getTheme());
   }
 
@@ -107,7 +121,20 @@ public class DynamicTheme {
     if (theme == Theme.SYSTEM && systemThemeAvailable()) {
       return isSystemInDarkTheme(context);
     } else {
-      return theme == Theme.DARK;
+      return theme == Theme.DARK || theme == Theme.AMOLED;
+    }
+  }
+
+  public static boolean isAmoledBlack(@NonNull Context context) {
+    // Unencrypted appearance preference is also available while Molly is locked.
+    return Theme.deserialize(TextSecurePreferences.getTheme(context)) == Theme.AMOLED;
+  }
+
+  public static void applyAmoledOverlay(@NonNull Context context) {
+    if (isAmoledBlack(context)) {
+      context.getTheme().applyStyle(useDynamicColors(context)
+          ? R.style.ThemeOverlay_Molly_Amoled_Dynamic
+          : R.style.ThemeOverlay_Molly_Amoled, true);
     }
   }
 

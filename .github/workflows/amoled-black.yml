@@ -1,0 +1,125 @@
+name: Molly Audio AMOLED
+on:
+  push:
+    branches: [feature/amoled-black]
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: amoled-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  source-and-tests:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    outputs:
+      source-sha: ${{ steps.publish.outputs.sha }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Apply reviewed theme change if not yet committed
+        run: |
+          if git apply --reverse --check tools/amoled/amoled-black.patch 2>/dev/null; then
+            echo 'Theme source is already applied.'
+          else
+            git apply --check tools/amoled/amoled-black.patch
+            git apply tools/amoled/amoled-black.patch
+          fi
+          git diff --check
+      - name: Theme and audio regressions
+        run: |
+          python3 tools/amoled/test_theme.py
+          bash tools/incoming-audio/test_host.sh
+      - name: Commit tested source on isolated theme branch
+        id: publish
+        env:
+          BRANCH: ${{ github.ref_name }}
+        run: |
+          test "$BRANCH" = feature/amoled-black
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add app/build.gradle.kts app/src/main core/ui/src/main
+          if ! git diff --cached --quiet; then
+            git commit -m 'feat(theme): add optional AMOLED Black without changing account or audio processing'
+            git push origin "HEAD:refs/heads/$BRANCH"
+          fi
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          git archive --format=tar.gz -o /tmp/molly-audio-source.tar.gz HEAD
+          git rev-parse HEAD > /tmp/source-revision.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: molly-audio-source
+          path: |
+            /tmp/molly-audio-source.tar.gz
+            /tmp/source-revision.txt
+          if-no-files-found: error
+  release-arm64:
+    needs: source-and-tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.source-and-tests.outputs.source-sha }}
+          fetch-depth: 0
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+          cmdline-tools-version: 13114758
+          log-accepted-android-sdk-licenses: false
+      - name: Prepare build SDK
+        run: |
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/.ghcup /usr/local/swift
+          sdkmanager 'build-tools;36.0.0' 'platforms;android-36.1' 'ndk;28.0.13004108'
+      - name: Reuse exact verified incoming-audio native engine
+        uses: actions/download-artifact@v4
+        with:
+          name: incoming-audio-native-arm64
+          run-id: 36788001263
+          github-token: ${{ github.token }}
+          path: out/incoming-audio
+      - name: Check native source and binary are unchanged
+        run: |
+          git diff --exit-code 866dc6097e0f924bffbee8eee394d827e388b60b -- native/incoming-audio tools/incoming-audio app/src/main/java/org/thoughtcrime/securesms/webrtc/audio
+          echo 'aa96d00217b556c01289ee883d6c6df3ffcec5fca91f0bc28e2affbb9d25c0ef  out/incoming-audio/ringrtc-incoming-audio-arm64.aar' | sha256sum -c
+          python3 tools/incoming-audio/verify_aar.py out/incoming-audio/ringrtc-incoming-audio-arm64.aar
+      - uses: gradle/actions/setup-gradle@v6
+      - name: Lint and build optimized in-place update
+        env:
+          INCOMING_AUDIO_AAR: ${{ github.workspace }}/out/incoming-audio/ringrtc-incoming-audio-arm64.aar
+        run: |
+          chmod +x gradlew
+          mkdir -p out/build-logs
+          set -o pipefail
+          common=(--no-daemon --no-parallel --max-workers=1
+            '-Dorg.gradle.jvmargs=-Xmx12g -XX:+UseParallelGC -XX:MaxMetaspaceSize=1g'
+            -Pkotlin.compiler.execution.strategy=in-process
+            -I tools/incoming-audio/native_override.gradle
+            -PbasePackageId=com.mekromn.mollyaudio
+            '-PbaseAppTitle=Molly Audio' -PbaseAppFileName=Molly-Audio)
+          ./gradlew "${common[@]}" :app:lintVitalProdStoreRelease 2>&1 | tee out/build-logs/app-lint.log
+          ./gradlew "${common[@]}" :app:assembleProdStoreRelease 2>&1 | tee out/build-logs/app-build.log
+          git rev-parse HEAD > out/build-logs/source-revision.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: molly-audio-amoled-arm64-unsigned
+          path: app/build/outputs/apk/prodStore/release/*.apk
+          if-no-files-found: error
+      - name: Preserve build reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: amoled-build-reports
+          path: |
+            out/build-logs/
+            app/build/reports/
+          if-no-files-found: ignore

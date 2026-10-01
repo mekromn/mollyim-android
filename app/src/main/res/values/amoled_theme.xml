@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <string name="preferences__amoled_black_theme">AMOLED Black</string>
+
+    <!-- Applied over the selected dark palette, not a replacement for accent colors.
+         Keep surfaceVariant for small controls/disabled tracks and preserve chat bubbles. -->
+    <style name="ThemeOverlay.Molly.Amoled" parent="">
+        <item name="amoled_black">true</item>
+        <item name="colorSurface">@android:color/black</item>
+        <item name="colorSurfaceDim">@android:color/black</item>
+        <item name="colorSurfaceBright">@android:color/black</item>
+        <item name="colorSurfaceContainerLowest">@android:color/black</item>
+        <item name="colorSurfaceContainerLow">@android:color/black</item>
+        <item name="colorSurfaceContainer">@android:color/black</item>
+        <item name="colorSurfaceContainerHigh">@android:color/black</item>
+        <item name="colorSurfaceContainerHighest">@android:color/black</item>
+        <item name="android:colorBackground">@android:color/black</item>
+        <item name="android:windowBackground">@android:color/black</item>
+        <item name="android:statusBarColor">@android:color/black</item>
+        <item name="android:navigationBarColor">@android:color/black</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
+        <item name="android:enforceStatusBarContrast" tools:targetApi="29">false</item>
+        <item name="android:enforceNavigationBarContrast" tools:targetApi="29">false</item>
+        <item name="elevationOverlayEnabled">false</item>
+        <item name="elevationOverlayColor">@android:color/black</item>
+        <item name="navbar_container_color">@android:color/black</item>
+        <item name="context_menu_container_color">@android:color/black</item>
+        <item name="message_request_bar_background_normal">@android:color/black</item>
+        <item name="conversation_item_recv_bubble_color_normal">@color/molly_surface_container_high_dark</item>
+        <item name="bottomSheetDialogTheme">@style/ThemeOverlay.Molly.Amoled.BottomSheet</item>
+    </style>
+
+    <!-- Fallback exists on API 27-30; the dynamic version is selected only on API 31+. -->
+    <style name="ThemeOverlay.Molly.Amoled.Dynamic" parent="ThemeOverlay.Molly.Amoled" />
+
+    <style name="ThemeOverlay.Molly.Amoled.BottomSheet" parent="ThemeOverlay.Material3.BottomSheetDialog">
+        <item name="amoled_black">true</item>
+        <item name="colorSurface">@android:color/black</item>
+        <item name="colorSurfaceContainerLow">@android:color/black</item>
+        <item name="colorSurfaceContainer">@android:color/black</item>
+        <item name="colorSurfaceContainerHigh">@android:color/black</item>
+        <item name="elevationOverlayEnabled">false</item>
+        <item name="android:navigationBarColor">@android:color/black</item>
+        <item name="android:windowLightNavigationBar">false</item>
+        <item name="android:enforceNavigationBarContrast" tools:targetApi="29">false</item>
+    </style>
+
+    <style name="Theme.Molly.Starting.Amoled" parent="Theme.Molly.Starting.Dark">
+        <item name="windowSplashScreenBackground">@android:color/black</item>
+    </style>
+</resources>

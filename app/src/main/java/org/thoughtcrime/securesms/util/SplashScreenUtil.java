@@ -28,6 +28,9 @@ public final class SplashScreenUtil {
       case DARK:
         activity.getSplashScreen().setSplashScreenTheme(R.style.Theme_Molly_Starting_Dark);
         break;
+      case AMOLED:
+        activity.getSplashScreen().setSplashScreenTheme(R.style.Theme_Molly_Starting_Amoled);
+        break;
       case SYSTEM:
         activity.getSplashScreen().setSplashScreenTheme(Resources.ID_NULL);
         break;

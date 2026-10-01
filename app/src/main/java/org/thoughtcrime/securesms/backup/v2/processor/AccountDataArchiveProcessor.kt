@@ -527,7 +527,7 @@ object AccountDataArchiveProcessor {
     return when (this) {
       SettingsValues.Theme.SYSTEM -> AccountData.AppTheme.SYSTEM
       SettingsValues.Theme.LIGHT -> AccountData.AppTheme.LIGHT
-      SettingsValues.Theme.DARK -> AccountData.AppTheme.DARK
+      SettingsValues.Theme.DARK, SettingsValues.Theme.AMOLED -> AccountData.AppTheme.DARK
     }
   }
 
