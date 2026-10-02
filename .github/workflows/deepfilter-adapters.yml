@@ -1,0 +1,74 @@
+name: DeepFilterNet audio adapters
+on:
+  push:
+    branches: [feature/deepfilternet-calls]
+    paths: ['native/call-denoise/**', 'tools/deepfilter/test_host.sh', '.github/workflows/deepfilter-adapters.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: deepfilter-adapters-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  adapters:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 30
+      - name: Validate reused inference inputs still match runtime source
+        run: git diff --exit-code 043492092948f7f599237e46af49b667284bcbb8 HEAD -- native/deepfilter-runtime tools/deepfilter/models.lock.json
+      - uses: actions/download-artifact@v4
+        with:
+          name: deepfilter-runtime-host
+          run-id: 36929152545
+          github-token: ${{ github.token }}
+          path: out/df-host
+      - uses: actions/download-artifact@v4
+        with:
+          name: deepfilter-android-reference-inputs
+          run-id: 36929152476
+          github-token: ${{ github.token }}
+          path: out/df-reference
+      - name: Verify exact runtime, model and independent vector bytes
+        run: |
+          cat <<'HASHES' | sha256sum -c -
+          9310854e231327780267ed2f1ca9b9e61ea5c2245961fcf0fb4419d6265b7502  out/df-host/libmolly_deepfilter.so
+          c94d91f70911001c946e0fabb4aa9adc37045f45a03b56008cb0c8244cb63616  out/df-reference/models/DeepFilterNet3_onnx.tar.gz
+          5998e58e8ba0e09bb76986ef97b84afa065a571ef282d4a1222f341e3251cf3a  out/df-reference/models/DeepFilterNet3_ll_onnx.tar.gz
+          766aada625686396dc9ccd30df4ecd880f4c9d4c1b1270ba5b9d847f6bbe9124  out/df-reference/vectors/input.f32
+          8bd1da1f494b9a18a5da0903cf731304e2b8d9ba8ee9a0c23b01a545ddea857c  out/df-reference/vectors/low_latency.f32
+          df9da8b2d10db71e5f42142ed2c0c0681745ff0541cda145e623754fc44a372a  out/df-reference/vectors/standard.f32
+          HASHES
+      - name: Fetch exact WebRTC converters
+        run: |
+          git clone --filter=blob:none --depth 1 --branch 7778d https://github.com/mollyim/webrtc.git "$RUNNER_TEMP/webrtc"
+          test "$(git -C "$RUNNER_TEMP/webrtc" rev-parse HEAD)" = 63074e7b349aff7cc6d7ff46d4f1dd3101077242
+          echo "WEBRTC_SOURCE=$RUNNER_TEMP/webrtc" >> "$GITHUB_ENV"
+      - name: Queue, timing, stereo, invalid-plan and fault regressions
+        run: |
+          mkdir -p out/adapter-reports
+          set -o pipefail
+          bash tools/deepfilter/test_host.sh timeline 2>&1 | tee out/adapter-reports/asan-ubsan.log
+      - name: Queue ownership under ThreadSanitizer
+        env:
+          SANITIZER: thread
+        run: |
+          set -o pipefail
+          bash tools/deepfilter/test_host.sh timeline 2>&1 | tee out/adapter-reports/tsan.log
+      - name: Both real models, upstream vectors and 16 rate-channel-model cases
+        env:
+          DF_HOST_RUNTIME: ${{ github.workspace }}/out/df-host/libmolly_deepfilter.so
+          DF_REFERENCE_ROOT: ${{ github.workspace }}/out/df-reference
+        run: |
+          set -o pipefail
+          bash tools/deepfilter/test_host.sh real_timeline 2>&1 | tee out/adapter-reports/real-models.log
+          git rev-parse HEAD > out/adapter-reports/source-revision.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: deepfilter-adapter-reports
+          path: out/adapter-reports/
+          if-no-files-found: error
