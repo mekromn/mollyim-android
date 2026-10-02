@@ -1,0 +1,37 @@
+name: Mock call development checkpoint
+on:
+  push:
+    branches: [feature/mock-call-lab]
+    paths: ['.github/workflows/mock-call-dev.yml', 'native/mock-call/**', 'docs/mock-call-progress.md']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  snapshot:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - name: Export exact tracked source only
+        run: |
+          mkdir -p out/mock-dev
+          git archive --format=tar.gz HEAD > out/mock-dev/source.tar.gz
+          git rev-parse HEAD > out/mock-dev/revision.txt
+          git ls-tree -r HEAD > out/mock-dev/tree.txt
+          git show -s --format=fuller HEAD > out/mock-dev/commit.txt
+      - name: Export pinned native integration source
+        run: |
+          git clone --depth 1 --branch 7778d https://github.com/mollyim/webrtc.git "$RUNNER_TEMP/mock-webrtc"
+          test "$(git -C "$RUNNER_TEMP/mock-webrtc" rev-parse HEAD)" = 63074e7b349aff7cc6d7ff46d4f1dd3101077242
+          git -C "$RUNNER_TEMP/mock-webrtc" archive --format=tar.gz HEAD api audio common_audio media modules rtc_base sdk system_wrappers BUILD.gn > out/mock-dev/webrtc.tar.gz
+          git clone --depth 1 --branch v2.69.5-1 https://github.com/mollyim/ringrtc.git "$RUNNER_TEMP/mock-ringrtc"
+          test "$(git -C "$RUNNER_TEMP/mock-ringrtc" rev-parse HEAD)" = 8d81a87adcb08b77446b691be3692ff7ed53d580
+          git -C "$RUNNER_TEMP/mock-ringrtc" archive --format=tar.gz HEAD > out/mock-dev/ringrtc.tar.gz
+          sha256sum out/mock-dev/*.tar.gz > out/mock-dev/sha256.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mock-call-dev-source
+          path: out/mock-dev/
+          if-no-files-found: error
