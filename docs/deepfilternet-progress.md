@@ -109,3 +109,31 @@ or ambiguous binding preserves unmodified calling, not a misattributed session.
 
 Task 6 controller/assets and Task 7 two-tab UI still require implementation.
 No DeepFilterNet APK or phone-call result is claimed by this source checkpoint.
+
+## Tasks 6 and 7 source checkpoint
+
+Added independent persistent settings/controller, verified atomic installation of
+bundled models to private storage, optional retained JNI bridge, and actual
+physical-route invalidation. Background initialization uses the existing
+RingRTC initialization hook through IncomingAudioController. Both new filters
+remain Off by default; editing a disabled filter never loads models or audio.
+A late asset completion reconciles current settings and cannot restore an old
+enable request. Storage/native failures leave ordinary calling available.
+
+Added Call audio with independent Received and Sent tabs, all approved model /
+suppression / post-filter / threshold / preset controls, bypass, Retry, reset,
+small numeric diagnostics and independent sheet visibility. Existing received
+effects are reused without changing their preference format or processing.
+AMOLED styling and existing mute/hang-up controls remain.
+
+Ten executed pure-Kotlin controller/asset contracts, Java JNI descriptor/missing-
+engine checks and Android-facing Kotlin API-fixture compilation pass. Two UI
+source-contract checks and six AMOLED host regressions pass. New JUnit and
+Compose instrumentation test sources are included; full Android compilation,
+instrumentation rendering and actual device calls are separate gates, not
+claimed by source checks. The app-compilation workflow deliberately emits no APK.
+
+The final native update must additionally reset manual comparison bypass on a
+new call and expose that state through status field 14. These follow-up native
+changes are tested locally but not part of the first Task 5 native run. Never
+package the earlier AAR without applying and verifying that follow-up.

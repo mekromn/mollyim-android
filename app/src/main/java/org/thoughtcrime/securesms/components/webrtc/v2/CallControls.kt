@@ -70,8 +70,8 @@ fun CallControls(
     modifier = modifier.padding(bottom = bottom)
   ) {
     if (callControlsState.displayEndCallButton && callControlsState.displayMicToggle) {
-      IncomingAudioControls(
-        onSheetDisplayChanged = callScreenSheetDisplayListener::onAudioDeviceSheetDisplayChanged
+      CallAudioControls(
+        onSheetDisplayChanged = callScreenSheetDisplayListener::onCallAudioSheetDisplayChanged
       )
     }
 
@@ -186,6 +186,7 @@ fun CallControlsPreview() {
  * Callbacks for call controls actions.
  */
 interface CallScreenSheetDisplayListener {
+  fun onCallAudioSheetDisplayChanged(displayed: Boolean) {}
   fun onAudioDeviceSheetDisplayChanged(displayed: Boolean)
   fun onOverflowDisplayChanged(displayed: Boolean)
   fun onVideoTooltipDismissed()

@@ -19,6 +19,7 @@ object IncomingAudioController {
   @JvmStatic
   @Synchronized
   fun initialize(context: Context) {
+    CallDenoiseController.initialize(context)
     if (preferences != null) return
     val prefs = context.applicationContext.getSharedPreferences("incoming_audio_v1", Context.MODE_PRIVATE)
     preferences = prefs

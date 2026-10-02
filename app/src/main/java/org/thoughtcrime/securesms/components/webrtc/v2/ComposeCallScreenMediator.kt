@@ -134,6 +134,10 @@ class ComposeCallScreenMediator(private val activity: WebRtcCallActivity, viewMo
       val callScreenControlsListener by controlsListener.collectAsStateWithLifecycle()
       val callScreenSheetDisplayListener = remember {
         object : CallScreenSheetDisplayListener {
+          override fun onCallAudioSheetDisplayChanged(displayed: Boolean) {
+            callScreenViewModel.callScreenState.update { it.copy(isDisplayingCallAudioSheet = displayed) }
+          }
+
           override fun onAudioDeviceSheetDisplayChanged(displayed: Boolean) {
             callScreenViewModel.callScreenState.update { it.copy(isDisplayingAudioToggleSheet = displayed) }
           }

@@ -372,6 +372,7 @@ public final class SignalCallManager implements CallManager.Observer, GroupCall.
   }
 
   public void onAudioDeviceChanged(@NonNull SignalAudioManager.AudioDevice activeDevice, @NonNull Set<SignalAudioManager.AudioDevice> availableDevices) {
+    org.thoughtcrime.securesms.webrtc.audio.CallDenoiseBridge.routeChanged();
     process((s, p) -> p.handleAudioDeviceChanged(s, activeDevice, availableDevices));
   }
 
