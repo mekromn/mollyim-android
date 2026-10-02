@@ -1,0 +1,26 @@
+diff --git a/app/build.gradle.kts b/app/build.gradle.kts
+index 25e65b9..13ae059 100644
+--- a/app/build.gradle.kts
++++ b/app/build.gradle.kts
+@@ -12,7 +12,7 @@ plugins {
+ 
+ val canonicalVersionCode = 1719
+ val canonicalVersionName = "8.19.2"
+-val currentHotfixVersion = 1
++val currentHotfixVersion = 2
+ val maxHotfixVersions = 100
+ val mollyRevision = 4
+ 
+diff --git a/app/src/main/java/org/thoughtcrime/securesms/components/settings/app/help/LicenseFragment.kt b/app/src/main/java/org/thoughtcrime/securesms/components/settings/app/help/LicenseFragment.kt
+index 2a44435..f4d2d0d 100644
+--- a/app/src/main/java/org/thoughtcrime/securesms/components/settings/app/help/LicenseFragment.kt
++++ b/app/src/main/java/org/thoughtcrime/securesms/components/settings/app/help/LicenseFragment.kt
+@@ -37,6 +37,8 @@ class LicenseFragment : ComposeFragment() {
+     val textState: State<List<String>> = Single
+       .fromCallable {
+         requireContext().resources.openRawResource(R.raw.third_party_licenses).readToLines() +
++          requireContext().resources.openRawResource(R.raw.deepfilter_notices).readToLines() +
++          (if (requireContext().assets.list("deepfilter")?.contains("notices.txt") == true) requireContext().assets.open("deepfilter/notices.txt").readToLines() else emptyList()) +
+           requireContext().assets.open("acknowledgments/libsignal.md").readToLines() +
+           requireContext().assets.open("acknowledgments/ringrtc.md").readToLines()
+       }

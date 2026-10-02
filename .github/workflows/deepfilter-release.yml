@@ -1,0 +1,170 @@
+name: Molly Audio DeepFilterNet release candidate
+on:
+  push:
+    branches: [feature/deepfilternet-calls]
+    paths: ['.github/workflows/deepfilter-release.yml', 'tools/deepfilter/verify_release.py', 'tools/deepfilter/release.patch', 'tools/deepfilter/runtime_smoke.c', 'tools/deepfilter/qemu_runtime.sh', 'tools/deepfilter/prepare_licenses.py']
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: deepfilter-release-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  apk:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 40
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Apply and commit the reviewed release identity and attribution
+        run: |
+          test "$GITHUB_REF" = refs/heads/feature/deepfilternet-calls
+          if ! git apply --reverse --check tools/deepfilter/release.patch 2>/dev/null; then
+            git apply --check tools/deepfilter/release.patch
+            git apply tools/deepfilter/release.patch
+          fi
+          python3 tools/deepfilter/test_release.py
+          git diff --check
+          git config user.name 'Molly Audio build'
+          git config user.email 'builder@localhost'
+          git add app/build.gradle.kts app/src/main/java/org/thoughtcrime/securesms/components/settings/app/help/LicenseFragment.kt
+          if ! git diff --cached --quiet; then
+            git fetch origin feature/deepfilternet-calls
+            test "$(git rev-parse origin/feature/deepfilternet-calls)" = "$GITHUB_SHA"
+            git commit -m 'build: preserve signed-in update identity and expose denoiser notices'
+            git push origin HEAD:feature/deepfilternet-calls
+          fi
+          mkdir -p out/release-reports
+          git rev-parse HEAD > out/release-reports/source-revision.txt
+      - uses: actions/download-artifact@v4
+        with:
+          name: molly-deepfilter-native-arm64
+          run-id: 37036471463
+          github-token: ${{ github.token }}
+          path: out/native
+      - uses: actions/download-artifact@v4
+        with:
+          name: deepfilter-android-reference-inputs
+          run-id: 36929152476
+          github-token: ${{ github.token }}
+          path: out/reference
+      - name: Verify native provenance and bundle both exact models once
+        run: |
+          echo 'b39eee64e214e68730d7e2da57ddb4ea518b5add8190952af00d5d90827b020e  out/native/ringrtc-deepfilter-arm64.aar' | sha256sum -c
+          python3 tools/deepfilter/package_native.py out/native/ringrtc-deepfilter-arm64.aar > out/release-reports/native-verification.json
+          python3 - <<'PY'
+          import json,sys
+          from pathlib import Path
+          sys.path.insert(0,'tools/deepfilter')
+          from verify_release import verify_inputs
+          from prepare_models import publish_asset
+          verify_inputs(Path('.'),json.loads(Path('out/native/native-inputs.json').read_text()))
+          lock=Path('tools/deepfilter/models.lock.json')
+          for model in json.loads(lock.read_text())['models']:
+              publish_asset((Path('out/reference/models')/model['asset']).read_bytes(),model,Path('app/src/main/assets/deepfilter')/model['asset'])
+          (Path('app/src/main/assets/deepfilter')/'models.json').write_bytes(lock.read_bytes())
+          PY
+      - name: Collect exact locked runtime dependency notices
+        run: |
+          rustup toolchain install 1.88.0 --profile minimal
+          cargo +1.88.0 metadata --locked --manifest-path native/deepfilter-runtime/Cargo.toml --format-version 1 > out/runtime-metadata.json
+          python3 tools/deepfilter/prepare_licenses.py out/runtime-metadata.json app/src/main/assets/deepfilter
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+          cmdline-tools-version: 13114758
+          log-accepted-android-sdk-licenses: false
+      - name: Prepare pinned build SDK
+        run: |
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/.ghcup /usr/local/swift
+          sdkmanager 'build-tools;36.0.0' 'platforms;android-36.1' 'ndk;28.0.13004108'
+      - uses: gradle/actions/setup-gradle@v6
+      - name: Lint and assemble the complete optimized APK
+        env:
+          INCOMING_AUDIO_AAR: ${{ github.workspace }}/out/native/ringrtc-deepfilter-arm64.aar
+        run: |
+          chmod +x gradlew
+          set -o pipefail
+          common=(--no-daemon --no-parallel --max-workers=1
+            '-Dorg.gradle.jvmargs=-Xmx12g -XX:+UseParallelGC -XX:MaxMetaspaceSize=1g'
+            -Pkotlin.compiler.execution.strategy=in-process
+            -I tools/incoming-audio/native_override.gradle
+            -PbasePackageId=com.mekromn.mollyaudio
+            '-PbaseAppTitle=Molly Audio' -PbaseAppFileName=Molly-Audio)
+          ./gradlew "${common[@]}" :app:lintVitalProdStoreRelease 2>&1 | tee out/release-reports/lint.log
+          ./gradlew "${common[@]}" :app:assembleProdStoreRelease 2>&1 | tee out/release-reports/assembly.log
+      - name: Verify compiled payload, model bytes, native code and retained JNI
+        run: |
+          mapfile -t apks < <(find app/build/outputs/apk/prodStore/release -maxdepth 1 -name '*.apk')
+          test "${#apks[@]}" = 1
+          SDK="$ANDROID_HOME/build-tools/36.0.0"
+          python3 tools/deepfilter/verify_release.py --apk "${apks[0]}" --aar out/native/ringrtc-deepfilter-arm64.aar --aapt2 "$SDK/aapt2" --dexdump "$SDK/dexdump" > out/release-reports/apk-verification.json
+          mkdir -p out/release-apk out/release-tools
+          cp "${apks[0]}" out/release-apk/Molly-Audio-DeepFilterNet-arm64-unsigned.apk
+          cp "$SDK/aapt2" "$SDK/dexdump" out/release-tools/
+          cp "$SDK/lib/apksigner.jar" out/release-tools/
+          git archive --format=tar.gz HEAD > out/release-reports/source.tar.gz
+      - uses: actions/upload-artifact@v4
+        with:
+          name: molly-deepfilter-release-unsigned
+          path: out/release-apk/
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        with:
+          name: molly-release-verification-tools
+          path: out/release-tools/
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: molly-deepfilter-release-reports
+          path: out/release-reports/
+          if-no-files-found: error
+  arm64-execution:
+    needs: apk
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: molly-deepfilter-release-unsigned
+          path: out/release-apk
+      - uses: actions/download-artifact@v4
+        with:
+          name: deepfilter-android-reference-inputs
+          run-id: 36929152476
+          github-token: ${{ github.token }}
+          path: out/reference
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+          cmdline-tools-version: 13114758
+          log-accepted-android-sdk-licenses: false
+      - name: Prepare native boundary execution environment
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y qemu-user e2fsprogs
+          sdkmanager 'ndk;28.0.13004108'
+      - name: Execute the APK's ARM64 inference with real Bionic and both models
+        run: |
+          set -o pipefail
+          mkdir -p out/arm64-execution
+          bash tools/deepfilter/qemu_runtime.sh out/release-apk/Molly-Audio-DeepFilterNet-arm64-unsigned.apk out/reference 2>&1 | tee out/arm64-execution/execution.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: molly-deepfilter-arm64-execution
+          path: |
+            out/arm64-execution/*.json
+            out/arm64-execution/*.log
+          if-no-files-found: error
