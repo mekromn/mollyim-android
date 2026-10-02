@@ -1,0 +1,199 @@
+name: Mock call native build
+on:
+  push:
+    branches: [feature/mock-call-lab]
+    paths: ['.github/workflows/mock-call-native.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: mock-call-native-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  publish-source:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    outputs:
+      revision: ${{ steps.commit.outputs.revision }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 100
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Import exact tested source checkpoint
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          test "$GITHUB_REF" = refs/heads/feature/mock-call-lab
+          mkdir -p out/mock-reports
+          python3 - <<'PYCODE'
+          import base64,gzip,hashlib,json,subprocess
+          from pathlib import Path
+          blobs=['9146f5009324fec7b12e9d550a34d6da37c24caf','484bb444060e1067ce1bbb76971ffd5c7d3c4be3','8b5e11d2ec33320071fead05bcef4f943010d316','00519441a2c37b6c7e27b07eda271228779da3ee']
+          parts=[]
+          for i,sha in enumerate(blobs):
+              record=json.loads(subprocess.check_output(['gh','api','repos/mekromn/mollyim-android/git/blobs/'+sha]))
+              data=base64.b64decode(record['content']).decode()
+              Path(f'out/mock-reports/source-part-{i}.txt').write_text(data)
+              parts.append(data)
+          # Correct transcription only; the complete patch SHA below is the authority.
+          for bad,good in [('sNMvUTTKO','sNMvUTKO'),('DsCz04ZZmq','DsCz04Zmq'),('OMIPLuT23iOMIPLuT23iXiUB','OMIPLuT23iXiUB'),('ZNQuEU5e5HO','ZNQuEI5e5HO')]:
+              parts[0]=parts[0].replace(bad,good)
+          b=parts[0].encode()
+          assert hashlib.sha1(b'blob '+str(len(b)).encode()+b'\0'+b).hexdigest()=='46fcefcfd69aa63644151bc3c0ea2146a13b8344','Source transcription differs; refusing to apply'
+          patch=gzip.decompress(base64.b64decode(''.join(parts),validate=True))
+          assert len(patch)==133842 and hashlib.sha256(patch).hexdigest()=='4e829b9052e907094d25fa7e53586c2f20cfe28855a969046856e40a3b2790f1'
+          subprocess.run(['git','merge-base','--is-ancestor','39d709109506eedda5149fa0e0087525243bbb55','HEAD'],check=True)
+          numstat=subprocess.check_output(['git','apply','--numstat','-'],input=patch).decode()
+          paths=[l.split('\t')[2] for l in numstat.splitlines()]
+          assert len(paths)==46 and len(set(paths))==46
+          for name in paths:assert not Path(name).is_absolute() and '..' not in Path(name).parts
+          subprocess.run(['git','apply','--check','-'],input=patch,check=True)
+          subprocess.run(['git','apply','-'],input=patch,check=True)
+          Path('out/mock-reports/import-paths.json').write_text(json.dumps(paths))
+          Path('out/mock-reports/import-hashes.json').write_text(json.dumps({name:hashlib.sha256(Path(name).read_bytes()).hexdigest() for name in paths},indent=2))
+          print('Verified exact patch and imported',len(paths),'source files.')
+          PYCODE
+      - name: Fetch pinned integration sources
+        run: |
+          git clone --filter=blob:none --depth 1 --branch 7778d https://github.com/mollyim/webrtc.git "$RUNNER_TEMP/webrtc"
+          test "$(git -C "$RUNNER_TEMP/webrtc" rev-parse HEAD)" = 63074e7b349aff7cc6d7ff46d4f1dd3101077242
+          git clone --depth 1 --branch v2.69.5-1 https://github.com/mollyim/ringrtc.git "$RUNNER_TEMP/ringrtc"
+          echo "WEBRTC_SOURCE=$RUNNER_TEMP/webrtc" >> "$GITHUB_ENV"
+          echo "RINGRTC_SOURCE=$RUNNER_TEMP/ringrtc" >> "$GITHUB_ENV"
+      - name: Scope, hardware lifetime and source-path regression checks
+        run: |
+          mkdir -p out/mock-reports
+          set -o pipefail
+          bash tools/mock-call/test_scope.sh 2>&1 | tee out/mock-reports/scope.log
+          SANITIZER=thread bash tools/mock-call/test_scope.sh 2>&1 | tee out/mock-reports/scope-tsan.log
+          python3 tools/mock-call/test_endpoint_api.py 2>&1 | tee out/mock-reports/endpoint-api-fixture.log
+          CXX=clang++ MOCK_STRICT=1 python3 tools/mock-call/test_endpoint_api.py 2>&1 | tee out/mock-reports/strict-headers.log
+          python3 tools/mock-call/test_patch.py 2>&1 | tee out/mock-reports/patch.log
+          bash tools/incoming-audio/test_host.sh 2>&1 | tee out/mock-reports/incoming.log
+          python3 tools/amoled/test_theme.py 2>&1 | tee out/mock-reports/theme.log
+          git diff --check
+      - name: Publish source only after checks
+        id: commit
+        run: |
+          python3 - <<'PYCODE'
+          import json,subprocess
+          from pathlib import Path
+          paths=json.loads(Path('out/mock-reports/import-paths.json').read_text())
+          subprocess.run(['git','add','--',*paths],check=True)
+          PYCODE
+          git config user.name "Molly Audio build"
+          git config user.email "builder@localhost"
+          git commit -m "feat(mock): isolate controls and add native call endpoint and recording taps"
+          git push origin HEAD:feature/mock-call-lab
+          echo "revision=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mock-call-source-reports
+          path: out/mock-reports/
+          if-no-files-found: error
+  native-arm64:
+    needs: publish-source
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    env:
+      BUILD_JOBS: '4'
+      MOLLY_DEEPFILTER_BUILD: '1'
+      MOLLY_MOCK_BUILD: '1'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 100
+          ref: ${{ needs.publish-source.outputs.revision }}
+      - name: Check reused inference runtime source
+        run: git diff --exit-code 043492092948f7f599237e46af49b667284bcbb8 HEAD -- native/deepfilter-runtime
+      - uses: actions/download-artifact@v4
+        with:
+          name: deepfilter-runtime-android-arm64
+          run-id: 36929152476
+          github-token: ${{ github.token }}
+          path: out/runtime-android
+      - name: Verify exact Android runtime
+        run: |
+          echo 'ad1c51cc08d857378f78c42a4c7d265e855a52a919a9d0ff283efb4a794a2eb1  out/runtime-android/libmolly_deepfilter.so' | sha256sum -c -
+          python3 tools/deepfilter/verify_runtime.py out/runtime-android/libmolly_deepfilter.so
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+          cmdline-tools-version: 13114758
+          log-accepted-android-sdk-licenses: false
+      - name: Prepare native SDK
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android/sdk/ndk /opt/ghc /usr/local/.ghcup /usr/local/swift
+          sudo apt-get update
+          sudo apt-get install -y clang ninja-build cmake protobuf-compiler libglib2.0-dev pkg-config
+          sdkmanager 'ndk;28.0.13004108' 'build-tools;36.0.0' 'platforms;android-36.1'
+          df -h .
+      - uses: actions/cache/restore@v4
+        id: native-cache
+        with:
+          path: out/mock-native/
+          key: mock-call-arm64-v1-${{ hashFiles('native/mock-call/**', 'tools/mock-call/patch_ringrtc.py', 'tools/mock-call/verify_native.py', 'native/call-denoise/**', 'native/incoming-audio/**', 'tools/deepfilter/patch_ringrtc.py', 'tools/deepfilter/package_native.py', 'tools/incoming-audio/build_native.sh', 'tools/incoming-audio/patch_ringrtc.py', 'native/deepfilter-runtime/Cargo.lock') }}
+      - uses: actions/cache/restore@v4
+        id: source-cache
+        if: steps.native-cache.outputs.cache-hit != 'true'
+        with:
+          path: ${{ runner.temp }}/molly-incoming-audio
+          key: molly-prepared-ubuntu24-7778d-v1-57d50b8656bfed9e42adf8de1d549ba4229cc909
+      - name: Prepare unmodified native workspace
+        if: steps.native-cache.outputs.cache-hit != 'true' && steps.source-cache.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p out/build-logs
+          set -o pipefail
+          bash tools/incoming-audio/build_native.sh prepare 2>&1 | tee out/build-logs/native-prepare.log
+      - uses: actions/cache/save@v4
+        if: steps.native-cache.outputs.cache-hit != 'true' && steps.source-cache.outputs.cache-hit != 'true'
+        continue-on-error: true
+        with:
+          path: ${{ runner.temp }}/molly-incoming-audio
+          key: ${{ steps.source-cache.outputs.cache-primary-key }}
+      - name: Compile actual patched RingRTC and package checked runtime
+        if: steps.native-cache.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p out/build-logs out/mock-native
+          set -o pipefail
+          bash tools/incoming-audio/build_native.sh build 2>&1 | tee out/build-logs/native-build.log
+          python3 tools/deepfilter/package_native.py out/incoming-audio/ringrtc-incoming-audio-arm64.aar --runtime out/runtime-android/libmolly_deepfilter.so --output out/mock-native/ringrtc-mock-arm64.aar > out/mock-native/verification.json
+          git rev-parse HEAD > out/mock-native/source-revision.txt
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib,json
+          files=[]
+          for directory in ('native/mock-call','native/call-denoise','native/incoming-audio','native/deepfilter-runtime'):
+              files += [p for p in Path(directory).rglob('*') if p.is_file() and 'target' not in p.parts and p.suffix in ('.h','.cc','.rs','.java','.inc','.toml','.lock')]
+          files += [Path(p) for p in ('tools/mock-call/patch_ringrtc.py','tools/deepfilter/patch_ringrtc.py','tools/incoming-audio/patch_ringrtc.py','tools/incoming-audio/build_native.sh')]
+          Path('out/mock-native/native-inputs.json').write_text(json.dumps({str(p):hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted(files)},indent=2))
+          PY
+      - name: Verify all new native and JNI definitions
+        run: python3 tools/mock-call/verify_native.py out/mock-native/ringrtc-mock-arm64.aar
+      - uses: actions/cache/save@v4
+        if: steps.native-cache.outputs.cache-hit != 'true'
+        with:
+          path: out/mock-native/
+          key: ${{ steps.native-cache.outputs.cache-primary-key }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: molly-mock-native-arm64
+          path: out/mock-native/
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mock-call-native-build-reports
+          path: out/build-logs/
