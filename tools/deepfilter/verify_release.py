@@ -27,7 +27,7 @@ def verify_badging(text):
  pkg=re.search(r"package: name='([^']+)' versionCode='([0-9]+)' versionName='([^']*)'",text)
  if not pkg or pkg[1]!=PACKAGE or int(pkg[2])!=171906:raise ValueError('Wrong update package/version')
  if 'application-debuggable' in text:raise ValueError('Debug APK is not a release')
- if "sdkVersion:'27'" not in text or "targetSdkVersion:'35'" not in text:raise ValueError('Changed SDK contract')
+ if not re.search(r"^(?:minSdkVersion|sdkVersion):\s*'27'\s*$",text,re.M) or not re.search(r"^targetSdkVersion:\s*'35'\s*$",text,re.M):raise ValueError('Changed SDK contract')
  abis=re.search(r"^native-code: (.+)$",text,re.M)
  if not abis or abis[1].strip()!="'arm64-v8a'":raise ValueError('Wrong ABI packaging')
  return {'package':pkg[1],'version_code':int(pkg[2]),'version_name':pkg[3],'debuggable':False,'min_sdk':27,'target_sdk':35}
@@ -93,6 +93,12 @@ def verify_payload(apk, lock, aar=None):
     result['libraries'][name]={'sha256':sha(data),'text_sha256':sha(text),'verified_exports':sorted(wanted)}
  return result
 
+def decode_dexdump(data: bytes) -> str:
+ # DEX literals are modified UTF-8 and can include surrogate encodings that
+ # are invalid standard UTF-8. Preserve those bytes as escapes, not omissions.
+ # Class/method/descriptor evidence for this ABI is strictly ASCII.
+ return data.decode('utf-8',errors='backslashreplace')
+
 def verify_sdk(apk,aapt2,dexdump):
  badging=subprocess.check_output([str(aapt2),'dump','badging',str(apk)],text=True)
  result=verify_badging(badging)
@@ -102,7 +108,7 @@ def verify_sdk(apk,aapt2,dexdump):
  with zipfile.ZipFile(apk) as z,tempfile.TemporaryDirectory() as td:
   for name in z.namelist():
    if re.fullmatch('classes[0-9]*.dex',name):
-    p=Path(td)/name;p.write_bytes(z.read(name));dumps.append(subprocess.check_output([str(dexdump),str(p)],text=True))
+    p=Path(td)/name;p.write_bytes(z.read(name));dumps.append(decode_dexdump(subprocess.check_output([str(dexdump),str(p)])))
  result['jni']=verify_dexdump('\n'.join(dumps),JNI)
  return result
 

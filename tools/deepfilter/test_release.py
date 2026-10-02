@@ -37,6 +37,21 @@ class ReleaseTests(unittest.TestCase):
     self.assertEqual(m.verify_sdk(apk,Path('aapt2'),Path('dexdump'))['version_code'],171906)
    with patch.object(m.subprocess,'check_output',side_effect=[badge,'unrelated :raw/deepfilter_notices reference']):
     with self.assertRaises(ValueError):m.verify_sdk(apk,Path('aapt2'),Path('dexdump'))
+ def test_sdk36_minimum_sdk_header(self):
+  m=self.module()
+  # Actual SDK36 aapt2 output uses minSdkVersion rather than sdkVersion.
+  actual="package: name='com.mekromn.mollyaudio' versionCode='171906' versionName='8.19.2-4'\nminSdkVersion:'27'\ntargetSdkVersion:'35'\nnative-code: 'arm64-v8a'\n"
+  self.assertEqual(m.verify_badging(actual)['min_sdk'],27)
+  for bad in (actual.replace("minSdkVersion:'27'","minSdkVersion:'28'"),actual.replace("targetSdkVersion:'35'","targetSdkVersion:'36'")):
+   with self.assertRaises(ValueError):m.verify_badging(bad)
+ def test_dexdump_modified_utf8_preserves_ascii_definition_evidence(self):
+  m=self.module()
+  decode=getattr(m,'decode_dexdump',None)
+  self.assertTrue(callable(decode),'DEX dump byte decoder is missing')
+  raw=b"Class #0            -\n  Class descriptor  : 'Ltest/Bridge;'\n  Direct methods    -\n    #0 :\n      name          : 'nativeTest'\n      type          : '()I'\n      access        : 0x0109 (PUBLIC STATIC NATIVE)\n  literal: "+bytes([0xed,0xa0,0x80])
+  text=decode(raw)
+  self.assertIn(r'\xed\xa0\x80',text)
+  self.assertEqual(m.verify_dexdump(text,{'Ltest/Bridge;':{'nativeTest':'()I'}}),{'Ltest/Bridge;':{'nativeTest':'()I'}})
  def test_manifest_input_hashes(self):
   m=self.module()
   with tempfile.TemporaryDirectory() as d:

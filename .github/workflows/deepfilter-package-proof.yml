@@ -2,7 +2,7 @@ name: Verify complete DeepFilterNet APK packaging
 on:
   push:
     branches: [feature/deepfilternet-calls]
-    paths: ['.github/workflows/deepfilter-package-proof.yml', 'tools/deepfilter/finalize_models.py']
+    paths: ['.github/workflows/deepfilter-package-proof.yml', 'tools/deepfilter/finalize_models.py', 'tools/deepfilter/verify_release.py', 'tools/deepfilter/test_release.py']
   workflow_dispatch:
 permissions:
   contents: read
@@ -36,6 +36,8 @@ jobs:
           sudo apt-get install -y qemu-user e2fsprogs
           sdkmanager 'ndk;28.0.13004108' 'build-tools;36.0.0'
           mkdir -p out/package-reports out/final-apk
+          mkdir -p out/package-reports/sdk-lib64
+          cp "$ANDROID_HOME/build-tools/36.0.0/lib64/libc++.so" out/package-reports/sdk-lib64/
       - name: Wait for the exact compiled build artifact, not a different branch
         id: compiled
         env:
