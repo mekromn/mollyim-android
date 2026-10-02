@@ -1,0 +1,70 @@
+name: DeepFilterNet ARM64 runtime proof
+on:
+  push:
+    branches: [feature/deepfilternet-calls]
+    paths: ['.github/workflows/deepfilter-runtime-proof.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  runtime:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: molly-deepfilter-native-arm64
+          run-id: 37036471463
+          github-token: ${{ github.token }}
+          path: out/native
+      - uses: actions/download-artifact@v4
+        with:
+          name: deepfilter-android-reference-inputs
+          run-id: 36929152476
+          github-token: ${{ github.token }}
+          path: out/reference
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+          cmdline-tools-version: 13114758
+          log-accepted-android-sdk-licenses: false
+      - name: Prepare runtime boundary environment
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y qemu-user e2fsprogs
+          sdkmanager 'ndk;28.0.13004108' 'build-tools;36.0.0'
+          mkdir -p out/proof-tools
+          cp "$ANDROID_HOME/build-tools/36.0.0/zipalign" "$ANDROID_HOME/build-tools/36.0.0/dexdump" "$ANDROID_HOME/build-tools/36.0.0/aapt2" out/proof-tools/
+      - name: Package exact AAR runtime and model bytes for boundary probe
+        run: |
+          python3 - <<'PY'
+          import hashlib,json,sys,zipfile
+          from pathlib import Path
+          sys.path.insert(0,'tools/deepfilter')
+          from prepare_models import validate_archive
+          aar=Path('out/native/ringrtc-deepfilter-arm64.aar')
+          assert hashlib.sha256(aar.read_bytes()).hexdigest()=='b39eee64e214e68730d7e2da57ddb4ea518b5add8190952af00d5d90827b020e'
+          with zipfile.ZipFile(aar) as a,zipfile.ZipFile('out/runtime-boundary-fixture.zip','w') as z:
+              z.writestr('lib/arm64-v8a/libmolly_deepfilter.so',a.read('jni/arm64-v8a/libmolly_deepfilter.so'))
+              for m in json.loads(Path('tools/deepfilter/models.lock.json').read_text())['models']:
+                  b=(Path('out/reference/models')/m['asset']).read_bytes()
+                  validate_archive(b,m)
+                  z.writestr('assets/deepfilter/'+m['asset'],b)
+          print('This is a native boundary probe, not an installable APK or phone-call test.')
+          PY
+      - name: Execute both real models under Android ARM64 Bionic
+        run: |
+          set -o pipefail
+          mkdir -p out/arm64-execution
+          bash tools/deepfilter/qemu_runtime.sh out/runtime-boundary-fixture.zip out/reference 2>&1 | tee out/arm64-execution/execution.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: deepfilter-runtime-arm64-proof
+          path: |
+            out/arm64-execution/*.json
+            out/arm64-execution/*.log
+            out/proof-tools/
+          if-no-files-found: error
