@@ -2,7 +2,7 @@ name: DeepFilterNet development snapshot
 on:
   push:
     branches: [feature/deepfilternet-calls]
-    paths: ['.github/workflows/deepfilter-dev-snapshot.yml']
+    paths: ['.github/workflows/deepfilter-dev-snapshot.yml', 'native/call-denoise/**', 'docs/deepfilternet-progress.md']
   workflow_dispatch:
 permissions:
   contents: read
@@ -13,13 +13,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 20
+          fetch-depth: 0
       - name: Export tracked source and history
         run: |
           mkdir -p out/dev-snapshot
           git archive --format=tar.gz HEAD > out/dev-snapshot/source.tar.gz
           git rev-parse HEAD > out/dev-snapshot/revision.txt
-          git log -20 --format='%H %s' > out/dev-snapshot/history.txt
+          git log -40 --format='%H %s' > out/dev-snapshot/history.txt
+          git ls-tree -r HEAD > out/dev-snapshot/tree.txt
           git diff b89c53117079099de3c910e27702046d3a74a279 HEAD --stat > out/dev-snapshot/change-summary.txt
           sha256sum out/dev-snapshot/source.tar.gz > out/dev-snapshot/source.sha256
       - name: Export pinned WebRTC source for converter tests
