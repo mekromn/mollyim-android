@@ -1,7 +1,7 @@
 # Molly Audio — Mock Call Lab design
 
 **Date:** 2026-10-02  
-**Status:** Revised specification for owner review, including the requested real microphone/speakerphone capture and handset-versus-speakerphone comparison. The in-chat design was approved; this document does not claim implementation or a new APK.  
+**Status:** Revised specification for owner review, including real microphone/speakerphone capture, handset-versus-speakerphone comparison, and visible live stats with separately labeled latency measurements. The in-chat design was approved; this document does not claim implementation or a new APK.  
 **Repository / branch:** `mekromn/mollyim-android` / `feature/mock-call-lab`.  
 **Source baseline:** `3935ddf30aecd90f19a414095a9b78a549d1a146`, the delivered DeepFilterNet release checkpoint.  
 **Installed baseline:** Molly Audio 171906. Preserve `com.mekromn.mollyaudio`, ARM64, minSdk 27, targetSdk 35, optimized release packaging, and the original signing certificate. Reserve 171907 for the next update; recheck the installed/latest supplied version before signing.
@@ -10,7 +10,7 @@
 
 Record a sample once, replay or loop it through the real call-processing paths, adjust the existing call-audio controls while listening, and deliberately apply the preferred settings to ordinary calls. Testing needs no second phone or connected participant. The lab must exercise actual native processing and communication-device routing, not just imitate the call screen around a separate media player.
 
-The approved scope includes Received, Sent, and Both modes; physical microphone recording in handset and speakerphone routes, simultaneous communication-output playback and microphone capture, route-to-route recording comparison, and lossless sample import; playback, loop selection, original/processed comparison, two settings snapshots A/B, explicit save/export, numeric diagnostics, and temporary settings. It preserves DeepFilterNet Standard/Low Latency, received EQ/compressor/gain/limiter, AMOLED, and the signed-in account.
+The approved scope includes Received, Sent, and Both modes; physical microphone recording in handset and speakerphone routes, simultaneous communication-output playback and microphone capture, route-to-route recording comparison, and lossless sample import; playback, loop selection, original/processed comparison, two settings snapshots A/B, explicit save/export, on-screen live statistics with expandable diagnostics and latency breakdowns, and temporary settings. It preserves DeepFilterNet Standard/Low Latency, received EQ/compressor/gain/limiter, AMOLED, and the signed-in account.
 
 This is a new local-session subsystem. The written implementation plan must map ownership and test injection into the actual native backend; calling only the standalone denoiser is insufficient. Network/codec simulation, recording real conversations, and a new denoising algorithm are outside this change.
 
@@ -116,13 +116,45 @@ Record-then-play is the default. Simultaneous received-clip speaker playback and
 
 The first build runs active tests only while the lab is visible: leaving it or locking the screen stops recording/live monitoring and pauses playback, releasing lab audio resources. A configuration change such as rotation preserves the session without duplicating capture; process death never auto-resumes recording. Closing releases temporary audio buffers, native contexts, focus, route requests, and handles. A corrupt model or denied microphone must not make the rest of Molly unusable.
 
-## 8. Diagnostics and proof of the exercised path
+## 8. Live stats, latency, and proof of the exercised path
 
-Display a numeric, session-scoped report: app/native/model revision, source kind, source format, actual processing/output rates and channels, backend, actual input/output route classes, handset/speakerphone segment and confirmation state, recording tap, platform-reported microphone mapping when available, visible capture-effect policy, communication volume, comparison procedure, enabled stages, effective denoiser states, model/adapter delay, mean/p95 processing time, deadline misses, fallback counts, dropped-recording blocks, input/output peaks, and clipping counts at defined taps. Invalid or stale values display unavailable.
+**Owner addition, 2026-10-02:** useful statistics and latency must be visible on the mock call screen while testing, not only in an exported report. This is part of the first-build interface.
 
-Tag counters at the actual production send and receive hooks, not only in the lab driver. Record source-interval/generation counters sufficient to prove that a clip traversed the requested path. Counters and hashes must not contain contacts, phone numbers, call identifiers, paths exposing private filenames, Bluetooth device addresses, or audio. Poll small snapshots at the existing low UI rate. Instrumentation must be dormant during ordinary calls when the lab is closed.
+### 8.1. Compact live panel and expanded diagnostics
 
-Report pipeline delay separately from measured end-to-end local I/O timing; absent a measurement, label I/O timing unmeasured. Reports support manual bug review and do not assert an objective best denoiser from model-estimated SNR alone.
+Place a compact **Live audio stats** panel below the LOCAL TEST label/timer and above the recording/call controls. Keep it outside the scrolling settings content. Show the actual route and recording tap, then separate **Received** and **Sent** rows with effective state, added audio delay in milliseconds, inference time in milliseconds per block, missed-block count, and small before/after level meters. An inactive direction says Off/Inactive rather than showing a previous measurement. Preserve a compact summary in the Call audio sheet header so tuning sliders does not hide the feedback. Reflow for landscape, large fonts and narrow displays; do not cover mute, hang-up or recording controls. Warnings use text/icons as well as color.
+
+Tapping the panel opens an expandable Diagnostics view with latency breakdown, performance, levels and route information. Include Pause display (freezes the readout, not audio), Reset stats (measurement window only, not model/settings/recording), and Export report. A frozen view is visibly labeled and still receives critical mute/preemption/error status. Opening diagnostics never opens the microphone or starts a test.
+
+### 8.2. Latency labels must describe different measurements
+
+| Label | Required meaning |
+|---|---|
+| Added audio delay — Received / Sent | Configured source-alignment delay of the active local processing path, including model lookahead, conversion and fixed scheduling allowance. Show the target as Configured; show an observed hook-to-hook source offset separately only when matching source intervals prove it. Include any received-effect lookahead actually used. Comparison bypass displays retained delay; stable Off displays zero *additional processing* delay, not zero device latency. |
+| Inference time | Measured worker wall time for processing one direction's block across its active channels. Show latest, mean, p95 and maximum, sample count and the five-second window. This is not model lookahead, audio delay, or a CPU-utilization percentage. Loading/reset time is reported separately. |
+| Queue wait / deadline | Measured submission-to-worker-start wait plus callback/block duration, queue occupancy, missed eligible blocks and fallback counts. Do not add inference or queue time onto a fixed delay that already budgets for them and call that a measured total. |
+| Input / output device delay | Backend timestamp-based estimate, only when the active backend exposes valid frame-position/time pairs in a verified timebase. Query off the audio callback. Label Estimated, identify the endpoint, and invalidate at route changes, restarts or clock discontinuities. Unsupported/stale estimates say Unavailable. Do not switch backend to obtain a nicer number. |
+| Local round-trip test | Optional, explicitly started independent test playback plus microphone capture, with delay derived from a credible reference match. Label the actual taps, included processing and acoustic geometry; show successful matches and spread/confidence. Keep call echo processing unchanged, do not raise volume automatically, and never loop the live mic into the speaker. A suppressed/ambiguous reference produces No reliable measurement, not an invented delay. This is not a remote-call or network measurement. |
+
+Do not sum Sent and Received delay unless an explicitly described test really traverses those stages in series. Both mode runs parallel streams. The mock has no network round-trip time, packet loss or remote-device latency; those fields say Not applicable, not zero. Measured, Estimated, Configured and Unavailable must remain distinct in the screen and report. No fixed Pixel latency values are supplied by this specification.
+
+### 8.3. Useful detailed statistics
+
+Show requested versus effective input/output route, handset/speakerphone segment, confirmation state, backend, source/processing/output sample rates, channel count, sample representation, block size and model choice. Include the platform-reported microphone mapping and visible capture-effect policy when observable; unexposed vendor processing stays Unknown.
+
+Show before/after digital peak and RMS levels, per-channel clipping counts, user-marked speech/pause levels, model-estimated local SNR with its label, compressor/limiter gain reduction when the corresponding received stages expose it, and digital headroom. Statistics identify their tap and unit; digital dBFS is not acoustic sound-pressure level. Pause-level reduction is not automatically speech-quality improvement. Do not label float samples that have merely exceeded unity as confirmed physical clipping; distinguish peak overs, PCM saturation and limiter action.
+
+Performance details include inference mean/p95/max, deadline misses with eligible-block denominator, dry fallback count/reason, queue fill/high-water mark, input/output underruns or overruns when reported by the backend, recording dropped blocks and writer backlog. App process CPU/RAM and platform thermal status may be sampled slowly where available; label their scope, and do not present battery temperature as processor temperature. Keep app/native/model revisions and whether each stream is actually audible in the report.
+
+### 8.4. Handset/speakerphone and settings comparisons
+
+Attach a numeric summary to each recorded route take and each completed A/B settings pass. Present Handset versus Speakerphone side by side with differences in levels, marked pause level, clipping, timing, inference and missed blocks where both measurements exist. Preserve route, tap, selected interval, settings revision, communication volume and fixed-position/typical-use procedure. Compare capture statistics before audition-only loudness matching. Do not subtract unrelated sample waveforms or claim a route-only improvement from two differently spoken takes. Do not silently pool measurements across a route, model, settings snapshot or recording-tap change; start a labeled segment and retain completed summaries.
+
+### 8.5. Low-overhead sampling and privacy
+
+Use fixed-size numeric snapshots. Refresh the compact panel at most ten times per second while the lab is visible; slower platform CPU/RAM/thermal sampling is at most once per second. Compute percentiles, strings, plots and exports away from audio callbacks; expensive process-memory queries run only while expanded diagnostics is visible. Bound history and label the measurement window, warm-up and stale values. Reset stats must not clear the denoiser's overload latch or conceal incomplete audio; keep session-total fault counts alongside resettable window counts. A pending previous-owner snapshot cannot reappear after preemption.
+
+Tag counters at the actual production send/receive hooks, not just the lab driver. Reports include methods, units, validity, source-interval/generation evidence, fallback/missing-block markers and settings/model revisions, but no recordings unless separately selected, no contacts, phone numbers, account/call identifiers, private paths or device addresses. Extra lab instrumentation remains dormant during ordinary calls. Export a human-readable report and versioned numeric JSON for later comparison; never automatically upload either.
 
 ## 9. Acceptance and release gates
 
@@ -136,6 +168,7 @@ Report pipeline delay separately from measured end-to-end local I/O timing; abse
 | Privacy/preemption | Tests force real-call arrival during recording, playback, loading, and final output hand-off. No lab sample reaches the real-call sender and no real-call sample reaches the lab writer/export. Mute/unmute and route changes reject stale capture. Verify no call-history/contact writes or lab signaling. |
 | Failures | Disk full, queue saturation, denied/revoked microphone permission, corrupt clips/models, rapid start/stop, focus loss, headset removal, and stale cleanup all stop the affected operation safely with clear status. Ordinary call startup remains available. |
 | Interface/device | Verify real rendered call screen, route selection, controls, A/B, rotation/back/lock, permission indicators, and AMOLED on Android. Test Received, Sent, Both, both models, and available earpiece/speaker/headset routes on the Pixel; mark unavailable routes NOT TESTED. |
+| Stats and timing | Verify compact/expanded visibility while tuning, defined taps/units and Configured/Measured/Estimated labels. Fake-clock tests reject stale/cross-owner data, clock resets and double-counted delay; Off versus aligned bypass remain distinct. Confirm known source offsets, percentile windows, queue/fault denominators, recording gaps and route-segment comparisons. Reset stats cannot reset overload or lose session totals. Missing backend timestamps/reference matches show unavailable; frame/callback allocation and diagnostic overhead are measured on-device. |
 | Package | Optimized ARM64 build/lint, retained JNI, unchanged model hashes, native ABI/alignment, and same-certificate increasing-version update. Test/debug entry must not make the app debuggable or expose exported recording controls. |
 
 Keep host, Android emulation, and physical-phone evidence separate. A UI-only screen, offline denoiser test, or passing source-anchor check is not sufficient proof of call-route playback. There is no mock-call APK in this design deliverable. Do not merge to main or the DeepFilterNet release branch automatically.
@@ -155,5 +188,8 @@ Platform references informing the route/capture distinction (requirements remain
 - Android `AudioManager.setCommunicationDevice`: selects a communication output and the platform selects the matching input; unavailable routes can be rejected. https://developer.android.com/reference/android/media/AudioManager#setCommunicationDevice(android.media.AudioDeviceInfo)
 - Android `AudioRecord`: active microphone/channel mapping, active recording configuration and actual routed device are queryable where supported. A preferred device is not proof of the actual input. https://developer.android.com/reference/android/media/AudioRecord
 - AOSP capture preprocessing: product-specific audio policy maps sources to device, gain and preprocessing. This does not establish which internals change on this Pixel when its route changes. https://source.android.com/docs/core/audio/implement-pre-processing
+
+- Oboe stream timestamp/latency contract: estimates are endpoint-specific, may be unsupported, and do not include unknown external-device delays. https://google.github.io/oboe/classoboe_1_1_audio_stream.html
+- Android audio latency measurement boundaries: https://developer.android.com/ndk/guides/audio/audio-latency
 
 **Next:** owner review of this written specification, then a concrete implementation plan identifying native test-endpoint construction, session-scoped controls, recording queues, source/sink interception, and preemption tests. Existing DeepFilterNet implementation is the baseline, not work to repeat.
