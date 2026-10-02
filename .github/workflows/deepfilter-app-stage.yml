@@ -49,7 +49,7 @@ jobs:
         run: |
           mkdir -p out/app-stage-reports
           set -o pipefail
-          python3 tools/deepfilter/prepare_test_inputs.py
+          python3 tools/deepfilter/prepare_test_inputs.py --output out/deepfilter-fixtures 2>&1 | tee out/app-stage-reports/fixture-setup.log
           bash tools/deepfilter/test_settings.sh 2>&1 | tee out/app-stage-reports/junit.log
           bash tools/deepfilter/test_controller.sh 2>&1 | tee out/app-stage-reports/controller.log
           python3 tools/deepfilter/test_controller_compile.py 2>&1 | tee out/app-stage-reports/glue-compile.log
