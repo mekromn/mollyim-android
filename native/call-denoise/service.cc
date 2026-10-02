@@ -33,6 +33,7 @@ bool NativeService::BeginSession(uint64_t owner,uint64_t factory)noexcept {
   if(!selected)return false;
   for(auto* t:transports_){const auto old=t->transport_.Gate().Read();if(old.active)t->transport_.Gate().EndSession(old.owner);}
   if(!selected->transport_.Gate().BeginSession(owner))return false;
+  control_.Bypass(Direction::Received,false);control_.Bypass(Direction::Sent,false);
   highest_owner_=owner;active_owner_=owner;active_factory_=factory;return true;
 }
 bool NativeService::EndSession(uint64_t owner)noexcept {

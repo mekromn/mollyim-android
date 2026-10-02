@@ -6,6 +6,7 @@
 #include <bit>
 #include <atomic>
 #include <cstdint>
+#include <cstddef>
 #include <algorithm>
 #include <mutex>
 #include <type_traits>

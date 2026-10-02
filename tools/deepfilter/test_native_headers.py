@@ -6,6 +6,7 @@ import shutil
 import subprocess
 import tempfile
 ROOT=Path(__file__).resolve().parents[2]
+assert '#include <cstddef>' in (ROOT/'native/call-denoise/control.h').read_text(), 'Modular libc++ requires std::byte direct include'
 STUB=r'''#pragma once
 #include <array>
 #include <span>

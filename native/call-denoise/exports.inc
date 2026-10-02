@@ -35,7 +35,9 @@ MOLLY_DF_EXPORT void Rust_MollyCallDenoiseRetry(int direction){
 MOLLY_DF_EXPORT int Rust_MollyCallDenoiseStatus(int direction,float* values,size_t length){
   if(direction<0||direction>1||!values||length!=16)return 0;
   const auto s=molly_denoise::GlobalService().Status(static_cast<molly_denoise::Direction>(direction));
-  const std::array<float,16> fields{static_cast<float>(s.state),static_cast<float>(s.rate),static_cast<float>(s.channels),s.rate?1000.f*s.delay_samples/s.rate:0,static_cast<float>(s.misses),s.input_peak,s.output_peak,s.snr,s.mean_us,s.p95_us,s.levels_valid?1.f:0.f,s.inference_valid?1.f:0.f,static_cast<float>(s.processed),static_cast<float>(s.updated_us/1000),0,0};
+  molly_denoise::ControlSnapshot requested;
+  molly_denoise::GlobalService().Controls().Read(static_cast<molly_denoise::Direction>(direction),requested);
+  const std::array<float,16> fields{static_cast<float>(s.state),static_cast<float>(s.rate),static_cast<float>(s.channels),s.rate?1000.f*s.delay_samples/s.rate:0,static_cast<float>(s.misses),s.input_peak,s.output_peak,s.snr,s.mean_us,s.p95_us,s.levels_valid?1.f:0.f,s.inference_valid?1.f:0.f,static_cast<float>(s.processed),static_cast<float>(s.updated_us/1000),requested.bypassed?1.f:0.f,0};
   std::copy(fields.begin(),fields.end(),values);return 1;
 }
 #undef MOLLY_DF_EXPORT
