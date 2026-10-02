@@ -14,20 +14,32 @@ bool DenoiseConfig::Valid() const noexcept {
 bool DenoiseControl::Update(Direction d,const DenoiseConfig& config) noexcept {
   if(!ValidDirection(d)||!config.Valid())return false;
   std::lock_guard lock(writer_);auto& c=current_[static_cast<size_t>(d)];c.config=config;++c.revision;
-  published_[static_cast<size_t>(d)].Publish(c);return true;
+  published_.Publish(current_);return true;
+}
+bool DenoiseControl::UpdateBoth(const DenoiseConfig& received,const DenoiseConfig& sent) noexcept {
+  if(!received.Valid()||!sent.Valid())return false;
+  std::lock_guard lock(writer_);
+  const uint64_t revision=std::max(current_[0].revision,current_[1].revision)+1;
+  if(!revision)return false;
+  current_[0].config=received;current_[1].config=sent;
+  current_[0].revision=revision;current_[1].revision=revision;
+  published_.Publish(current_);return true;
 }
 void DenoiseControl::Bypass(Direction d,bool bypass) noexcept {
   if(!ValidDirection(d))return;
   std::lock_guard lock(writer_);auto& c=current_[static_cast<size_t>(d)];
-  if(c.bypassed!=bypass){c.bypassed=bypass;++c.revision;published_[static_cast<size_t>(d)].Publish(c);}
+  if(c.bypassed!=bypass){c.bypassed=bypass;++c.revision;published_.Publish(current_);}
 }
 void DenoiseControl::Retry(Direction d) noexcept {
   if(!ValidDirection(d))return;
   std::lock_guard lock(writer_);auto& c=current_[static_cast<size_t>(d)];++c.retry;++c.revision;
-  published_[static_cast<size_t>(d)].Publish(c);
+  published_.Publish(current_);
 }
 bool DenoiseControl::Read(Direction d,ControlSnapshot& out) const noexcept {
-  return ValidDirection(d)&&published_[static_cast<size_t>(d)].Read(out);
+  if(!ValidDirection(d))return false;
+  std::array<ControlSnapshot,2> pair;
+  if(!published_.Read(pair))return false;
+  out=pair[static_cast<size_t>(d)];return true;
 }
 bool OverloadWindow::Observe(bool eligible,bool miss) noexcept {
   miss=eligible&&miss;misses_-=missed_[cursor_];missed_[cursor_]=miss?1:0;misses_+=missed_[cursor_];

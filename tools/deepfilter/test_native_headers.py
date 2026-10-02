@@ -49,7 +49,7 @@ with tempfile.TemporaryDirectory() as tmp:
         if path.suffix in ('.h','.cc','.inc'):shutil.copy2(path,target/path.name)
     shutil.copy2(ROOT/'native/deepfilter-runtime/include/molly_deepfilter.h',target/'molly_deepfilter.h')
     old=work/'audio/molly_incoming';old.mkdir()
-    for name in ('adapter.h','dsp.h'):shutil.copy2(ROOT/'native/incoming-audio'/name,old/name)
+    for name in ('adapter.h','dsp.h','effect_scope.h'):shutil.copy2(ROOT/'native/incoming-audio'/name,old/name)
     (work/'api/audio').mkdir(parents=True);(work/'api/audio/audio_frame.h').write_text(STUB)
     (work/'contract.cc').write_text(TEST)
     flags=[os.environ.get('CXX','clang++'),'-std=c++20','-O1','-pthread','-Wall','-Wextra','-Werror','-Wunsafe-buffer-usage','-Wexit-time-destructors','-Wglobal-constructors','-fno-exceptions','-fno-rtti','-I',str(work),'-I',str(target)]

@@ -4,6 +4,7 @@
 #include <chrono>
 #include <limits>
 namespace molly_denoise {
+bool NativeService::HasActiveSession()noexcept {std::lock_guard lock(mutex_);return active_owner_!=0;}
 uint64_t NativeService::NewOwner()noexcept {
   const auto n=next_.fetch_add(1);return n&&n<std::numeric_limits<int64_t>::max()?n:0;
 }
@@ -33,7 +34,7 @@ bool NativeService::BeginSession(uint64_t owner,uint64_t factory)noexcept {
   if(!selected)return false;
   for(auto* t:transports_){const auto old=t->transport_.Gate().Read();if(old.active)t->transport_.Gate().EndSession(old.owner);}
   if(!selected->transport_.Gate().BeginSession(owner))return false;
-  control_.Bypass(Direction::Received,false);control_.Bypass(Direction::Sent,false);
+  Controls().Bypass(Direction::Received,false);Controls().Bypass(Direction::Sent,false);
   highest_owner_=owner;active_owner_=owner;active_factory_=factory;return true;
 }
 bool NativeService::EndSession(uint64_t owner)noexcept {
@@ -48,7 +49,7 @@ bool NativeService::Invalidate(uint64_t owner,GateReason reason)noexcept {
 }
 DenoiseStatus NativeService::Status(Direction direction)noexcept {
   std::lock_guard lock(mutex_);if(auto* t=Active())return t->transport_.Status(direction);
-  ControlSnapshot c;control_.Read(direction,c);DenoiseStatus status;status.state=c.config.enabled?EffectiveState::Unavailable:EffectiveState::Off;return status;
+  ControlSnapshot c;Controls().Read(direction,c);DenoiseStatus status;status.state=c.config.enabled?EffectiveState::Unavailable:EffectiveState::Off;return status;
 }
 TransportBinding::TransportBinding(NativeService& s,bool threaded):service_(s),transport_(s.Controls(),s.Factory(),s.CreationToken(),threaded){s.Attach(this);}
 TransportBinding::~TransportBinding(){service_.Detach(this);}
@@ -75,4 +76,13 @@ std::unique_ptr<StreamingEngine>ConfigurableFactory::Create(Model model,uint32_t
 }
 ConfigurableFactory& GlobalFactory(){static auto* const factory=new ConfigurableFactory();return *factory;}
 NativeService& GlobalService(){static auto* const service=new NativeService(GlobalFactory());return *service;}
+namespace {std::atomic<NativeService*> constructing_service{nullptr};}
+NativeService& ConstructionService(){auto* s=constructing_service.load();return s?*s:GlobalService();}
+bool SelectConstructionService(NativeService* next)noexcept {
+  if(!next||!next->Local())return false;
+  NativeService* empty=nullptr;return constructing_service.compare_exchange_strong(empty,next);
+}
+bool ClearConstructionService(NativeService* expected)noexcept {
+  return expected&&constructing_service.compare_exchange_strong(expected,nullptr);
+}
 }

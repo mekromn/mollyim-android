@@ -13,11 +13,11 @@ extern "C" __attribute__((visibility("default"))) int Rust_MollyIncomingAudioCon
   molly_audio::GetSettingsBus().Publish(molly_audio::Settings::Unpack(parameters));return 1;
 }
 extern "C" __attribute__((visibility("default"))) void Rust_MollyIncomingAudioReset() {
-  molly_audio::reset_epoch.fetch_add(1,std::memory_order_relaxed);
+  molly_audio::ProductionEffectScope().reset_epoch.fetch_add(1,std::memory_order_relaxed);
 }
 extern "C" __attribute__((visibility("default"))) float Rust_MollyIncomingAudioMeter(int index) {
-  return index>=0 && index<6?molly_audio::meter_values[index].load(std::memory_order_relaxed):0;
+  return index>=0 && index<6?molly_audio::ProductionEffectScope().meter_values[index].load(std::memory_order_relaxed):0;
 }
 extern "C" __attribute__((visibility("default"))) uint32_t Rust_MollyIncomingAudioFrames() {
-  return molly_audio::frame_counter.load(std::memory_order_relaxed);
+  return molly_audio::ProductionEffectScope().frame_counter.load(std::memory_order_relaxed);
 }

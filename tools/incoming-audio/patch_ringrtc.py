@@ -20,7 +20,7 @@ def patch(ringrtc: Path, sources: Path) -> None:
     webrtc = ringrtc / 'src/webrtc/src'
     destination = webrtc / 'audio/molly_incoming'
     destination.mkdir(parents=True, exist_ok=True)
-    for name in ('dsp.h', 'adapter.h'):
+    for name in ('dsp.h', 'adapter.h', 'effect_scope.h'):
         shutil.copy2(sources / name, destination / name)
     header = webrtc / 'audio/audio_transport_impl.h'
     replace_once(header, '#include "api/audio/audio_mixer.h"', '#include "api/audio/audio_mixer.h"\n#include "audio/molly_incoming/adapter.h"')

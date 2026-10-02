@@ -54,13 +54,15 @@ struct ControlSnapshot {DenoiseConfig config;uint64_t revision=0,retry=0;bool by
 class DenoiseControl {
  public:
   bool Update(Direction,const DenoiseConfig&) noexcept;
+  bool UpdateBoth(const DenoiseConfig&,const DenoiseConfig&) noexcept;
+  bool ReadBoth(std::array<ControlSnapshot,2>& out)const noexcept{return published_.Read(out);}
   void Bypass(Direction,bool) noexcept;
   void Retry(Direction) noexcept;
   bool Read(Direction,ControlSnapshot&) const noexcept;
  private:
   std::mutex writer_;
   std::array<ControlSnapshot,2> current_{};
-  std::array<AtomicSnapshot<ControlSnapshot>,2> published_;
+  AtomicSnapshot<std::array<ControlSnapshot,2>> published_;
 };
 // Exactly 500 10-ms callbacks. Loading/mute/bypass are ineligible time slots,
 // not artificial successes. The ratio rule starts at a full five seconds.

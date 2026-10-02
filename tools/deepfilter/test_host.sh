@@ -3,7 +3,8 @@ set -euo pipefail
 ROOT=$(cd "$(dirname "$0")/../.." && pwd)
 MODE=${1:-timeline}
 WORK=${DEEPFILTER_HOST_OUT:-"$ROOT/out/denoise-host"}
-mkdir -p "$WORK"
+mkdir -p "$WORK/audio"
+ln -sfn "$ROOT/native/incoming-audio" "$WORK/audio/molly_incoming"
 if [[ ! -f "$ROOT/native/call-denoise/timeline.h" ]]; then
   echo 'FAIL: fixed-delay rate adapter is not implemented' >&2; exit 1
 fi
@@ -17,7 +18,7 @@ if [[ "$MODE" == worker || "$MODE" == library || "$MODE" == transport || "$MODE"
 fi
 if [[ "$MODE" == transport || "$MODE" == service ]]; then EXTRA+=("$ROOT/native/call-denoise/gate.cc" "$ROOT/native/call-denoise/transport.cc" "$ROOT/native/call-denoise/service.cc"); fi
 "$CXX" "${FLAGS[@]}" -DWEBRTC_POSIX -DWEBRTC_LINUX \
-  -I "$ROOT/native/deepfilter-runtime/include" -I "$ROOT/native/call-denoise/tests/support" -I "$ROOT/native/call-denoise" -I "$WEBRTC_SOURCE" \
+  -I "$WORK" -I "$ROOT/native/deepfilter-runtime/include" -I "$ROOT/native/call-denoise/tests/support" -I "$ROOT/native/call-denoise" -I "$WEBRTC_SOURCE" \
   "${EXTRA[@]}" "$ROOT/native/call-denoise/tests/${MODE}_test.cc" "$ROOT/native/call-denoise/timeline.cc" \
   "$ROOT/native/call-denoise/tests/support/platform.cc" \
   "$WEBRTC_SOURCE/common_audio/resampler/push_sinc_resampler.cc" \

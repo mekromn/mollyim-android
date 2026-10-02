@@ -63,7 +63,7 @@ with tempfile.TemporaryDirectory() as tmp:
     work = Path(tmp)
     headers = work / 'audio/molly_incoming'
     headers.mkdir(parents=True)
-    for name in ('dsp.h', 'adapter.h', 'exports.inc'):
+    for name in ('dsp.h', 'adapter.h', 'effect_scope.h', 'exports.inc'):
         shutil.copy2(ROOT / 'native/incoming-audio' / name, headers / name)
     (work / 'api/audio').mkdir(parents=True)
     (work / 'api/audio/audio_frame.h').write_text(STUB)

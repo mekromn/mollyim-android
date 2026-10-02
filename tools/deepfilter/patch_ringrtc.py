@@ -38,7 +38,7 @@ def patch(ring: Path, root: Path) -> None:
     # Source copies are refreshed even on repeated invocations; placement edits
     # below remain fail-closed and idempotent, not fuzzy line-number patches.
     incoming = web / 'audio/molly_incoming'
-    for name in ('adapter.h', 'dsp.h'):
+    for name in ('adapter.h', 'dsp.h', 'effect_scope.h'):
         shutil.copy2(root / 'native/incoming-audio' / name, incoming / name)
     dest = web / 'audio/molly_denoise'; dest.mkdir(exist_ok=True)
     native = root / 'native/call-denoise'

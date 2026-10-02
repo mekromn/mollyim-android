@@ -44,7 +44,8 @@ struct Settings {
     a[4]=gain_db; a[5]=threshold_db; a[6]=ratio; a[7]=attack_ms;
     a[8]=release_ms; a[9]=knee_db; a[10]=makeup_db;
     a[11]=ceiling_db; a[12]=limiter_release_ms;
-    for(size_t i=0;i<kBands;++i) a[13+i]=eq_db[i]; a[23]=gain_enabled;
+    for(size_t i=0;i<kBands;++i) { a[13+i]=eq_db[i]; }
+    a[23]=gain_enabled;
     return a;
   }
   static Settings Unpack(const std::array<float,kParameters>& a) {

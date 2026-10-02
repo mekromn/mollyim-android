@@ -51,7 +51,9 @@ if [[ "$PHASE" == prepare ]]; then
 fi
 [[ $(cat "$PREPARED") == "$(checkpoint)" ]] || { echo 'Prepared source revisions changed; refusing cached workspace' >&2; exit 1; }
 (cd src/webrtc/src && gn --version)
-if [[ ${MOLLY_DEEPFILTER_BUILD:-0} == 1 ]]; then
+if [[ ${MOLLY_MOCK_BUILD:-0} == 1 ]]; then
+  python3 "$ROOT/tools/mock-call/patch_ringrtc.py" "$WORK/ringrtc"
+elif [[ ${MOLLY_DEEPFILTER_BUILD:-0} == 1 ]]; then
   python3 "$ROOT/tools/deepfilter/patch_ringrtc.py" "$WORK/ringrtc"
 else
   python3 "$ROOT/tools/incoming-audio/patch_ringrtc.py" "$WORK/ringrtc"

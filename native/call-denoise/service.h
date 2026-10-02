@@ -2,6 +2,7 @@
 #ifndef MOLLY_DENOISE_SERVICE_H_
 #define MOLLY_DENOISE_SERVICE_H_
 #include "transport.h"
+#include "audio/molly_incoming/effect_scope.h"
 #include <vector>
 #include <semaphore>
 namespace molly_denoise {
@@ -10,17 +11,21 @@ class TransportBinding;
 // a stable direct reference to its own CallTransport; it never takes this mutex.
 class NativeService {
  public:
-  explicit NativeService(EngineFactory& factory):factory_(factory){}
+  explicit NativeService(EngineFactory& factory,DenoiseControl* controls=nullptr,molly_audio::EffectScope* effects=nullptr,bool local=false)
+      :factory_(factory),external_controls_(controls),external_effects_(effects),local_(local){}
   uint64_t BeginFactory()noexcept;
   bool FinishFactory(uint64_t)noexcept;
   uint64_t CreationToken()const noexcept{return creating_.load();}
   uint64_t NewOwner()noexcept;
+  bool HasActiveSession()noexcept;
   bool BeginSession(uint64_t owner,uint64_t factory)noexcept;
   bool EndSession(uint64_t owner)noexcept;
   bool SetGate(uint64_t owner,bool allowed,GateReason reason)noexcept;
   bool Invalidate(uint64_t owner,GateReason reason)noexcept;
   DenoiseStatus Status(Direction)noexcept;
-  DenoiseControl& Controls()noexcept{return control_;}
+  DenoiseControl& Controls()noexcept{return external_controls_?*external_controls_:control_;}
+  molly_audio::EffectScope& Effects()noexcept{return external_effects_?*external_effects_:molly_audio::ProductionEffectScope();}
+  bool Local()const noexcept{return local_;}
   EngineFactory& Factory()noexcept{return factory_;}
  private:
   friend class TransportBinding;
@@ -33,6 +38,9 @@ class NativeService {
   uint64_t highest_owner_=0,active_owner_=0,active_factory_=0;
   EngineFactory& factory_;
   DenoiseControl control_;
+  DenoiseControl* external_controls_;
+  molly_audio::EffectScope* external_effects_;
+  bool local_;
 };
 class TransportBinding {
  public:
@@ -40,6 +48,8 @@ class TransportBinding {
   ~TransportBinding();
   bool Bound()const noexcept{return verified_.load();}
   CallTransport& Core()noexcept{return transport_;}
+  const CallTransport& Core()const noexcept{return transport_;}
+  NativeService& Service()noexcept{return service_;}
  private:
   friend class NativeService;
   NativeService& service_;
@@ -63,5 +73,10 @@ class ConfigurableFactory final:public EngineFactory {
 };
 ConfigurableFactory& GlobalFactory();
 NativeService& GlobalService();
+// Selection is construction-only under the shared Java factory lock. A verified
+// instance retains its own service; callbacks never consult this selector.
+NativeService& ConstructionService();
+bool SelectConstructionService(NativeService*)noexcept;
+bool ClearConstructionService(NativeService*)noexcept;
 }
 #endif

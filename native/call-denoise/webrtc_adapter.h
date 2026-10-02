@@ -3,6 +3,7 @@
 #define MOLLY_DENOISE_WEBRTC_ADAPTER_H_
 #define MOLLY_CALL_DENOISE 1
 #include "service.h"
+#include "observer.h"
 #include "api/audio/audio_frame.h"
 #include <algorithm>
 #include <cmath>
@@ -36,7 +37,10 @@ inline void WriteFrame(webrtc::AudioFrame& frame,std::span<const float> output)n
 }
 class WebRtcDenoiser {
  public:
-  WebRtcDenoiser():binding_(GlobalService()){}
+  WebRtcDenoiser():binding_(ConstructionService()){}
+  DenoiseStatus Status(Direction direction)const noexcept{return binding_.Core().Status(direction);}
+  molly_audio::EffectScope& Effects()noexcept{return binding_.Service().Effects();}
+  NativeService& Service()noexcept{return binding_.Service();}
   bool Bound()const noexcept{return binding_.Bound();}
   CallTransport* Receiver()noexcept{return Bound()?&binding_.Core():nullptr;}
   void StampCapture(webrtc::AudioFrame* frame)noexcept {
@@ -45,12 +49,15 @@ class WebRtcDenoiser {
     frame->molly_owner_=stamp.owner;frame->molly_gate_generation_=stamp.gate_generation;
     frame->molly_stream_generation_=stamp.stream_generation;frame->molly_source_start_=stamp.source_start;
   }
+  void SetObserver(PathObserver* observer)noexcept {observer_=observer;}
   CallTransport::Lease ProcessSent(webrtc::AudioFrame* frame)noexcept {
     auto packet=ReadFrame(*frame);
     const CaptureStamp stamp{frame->molly_owner_,frame->molly_gate_generation_,frame->molly_stream_generation_,frame->molly_source_start_};
     auto lease=binding_.Core().PrepareSent(stamp,packet);
     if(!lease)return {};
+    if(observer_)observer_->Before(false,packet);
     const auto result=binding_.Core().ProcessSent(packet,sent_scratch_);
+    if(observer_)observer_->After(false,result,std::span(sent_scratch_).first(packet.meta.samples()));
     if(result.kind!=OutputKind::Direct){WriteFrame(*frame,sent_scratch_);ApplyFrameMetadata(*frame,result.source);}
     return lease;
   }
@@ -59,6 +66,7 @@ class WebRtcDenoiser {
     auto& gate=binding_.Core().Gate();gate.Invalidate(gate.Read().owner,GateReason::CaptureStop);
   }
  private:
+  PathObserver* observer_=nullptr;
   TransportBinding binding_;
   std::array<float,kMaxSamples> sent_scratch_{};
 };
