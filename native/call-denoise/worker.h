@@ -28,6 +28,8 @@ class DirectionProcessor {
   // Non-blocking cancellation when capture stops (no future callback is
   // required). Task 5's authoritative gate decides whether a new epoch may run.
   void Invalidate() noexcept;
+  // Caller must exclude concurrent Process() via the transport hand-off lease.
+  void QuiescentInvalidate() noexcept;
   // Same worker iteration as the real thread, never call when thread=true.
   void PumpForTest();
  private:

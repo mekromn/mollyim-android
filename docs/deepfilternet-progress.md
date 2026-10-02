@@ -81,3 +81,31 @@ version is 171906. Reuse signing certificate
 `eb6825c9abab77a52cf12444d078d4b808c4c708ec31efaf8c59b0adf686557b`.
 Never generate a replacement key, clear data, modify registration, or label the
 installed 171905 APK a DeepFilterNet build.
+
+## Task 5 source checkpoint (native integration build still pending)
+
+Added checked factory-to-transport binding, per-call owner and separate sent /
+received gate generations, pre-APM capture stamps carried through AudioFrame,
+nonblocking final hand-off leases, and source patches for direct/group/remote
+mute, end/dispose, and native capture stop. A stale factory cannot adopt a new
+call, including reuse of the shared group factory. The receive hook now feeds
+float denoiser output directly into the existing float effects before final PCM
+conversion. Unsupported geometry retains ordinary audio with a guarded capture
+stamp rather than being mistaken for a valid model frame.
+
+Thirteen gate/transport tests and five factory-ownership tests pass under
+ASan/UBSan and separately TSan. Strict Chromium-style header/source compilation
+with no exceptions/RTTI also passes after replacing raw snapshot memcpy and
+iterator arithmetic with bounded array/span operations. These source fixtures
+are NOT Android execution. Exact pinned patch application is idempotent and
+rejects version drift. Actual RingRTC native compilation is the next gate.
+
+Rulings: final hand-off and mute need a linearization point; the audio callback
+uses try-lock only, while control can wait for an already accepted short sender
+hand-off, never for inference. AudioFrame uses four provenance fields rather
+than three so format changes remain callback-local without aliasing mute epochs.
+A verified factory-construction handshake is required before binding; a missing
+or ambiguous binding preserves unmodified calling, not a misattributed session.
+
+Task 6 controller/assets and Task 7 two-tab UI still require implementation.
+No DeepFilterNet APK or phone-call result is claimed by this source checkpoint.

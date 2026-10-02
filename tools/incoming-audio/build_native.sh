@@ -51,7 +51,11 @@ if [[ "$PHASE" == prepare ]]; then
 fi
 [[ $(cat "$PREPARED") == "$(checkpoint)" ]] || { echo 'Prepared source revisions changed; refusing cached workspace' >&2; exit 1; }
 (cd src/webrtc/src && gn --version)
-python3 "$ROOT/tools/incoming-audio/patch_ringrtc.py" "$WORK/ringrtc"
+if [[ ${MOLLY_DEEPFILTER_BUILD:-0} == 1 ]]; then
+  python3 "$ROOT/tools/deepfilter/patch_ringrtc.py" "$WORK/ringrtc"
+else
+  python3 "$ROOT/tools/incoming-audio/patch_ringrtc.py" "$WORK/ringrtc"
+fi
 # Siso uses -offline, not Ninja's unsupported -jN spelling.
 # Its local worker count defaults to the available CPUs.
 ./bin/build-aar --release-build --arch arm64 -j "${BUILD_JOBS:-2}" --extra-ninja-flags=-offline

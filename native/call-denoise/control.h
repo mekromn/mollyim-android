@@ -6,7 +6,7 @@
 #include <bit>
 #include <atomic>
 #include <cstdint>
-#include <cstring>
+#include <algorithm>
 #include <mutex>
 #include <type_traits>
 namespace molly_denoise {
@@ -20,8 +20,10 @@ template<class T> class AtomicSnapshot {
  public:
   AtomicSnapshot() noexcept { Publish(T{}); }
   void Publish(const T& value) noexcept {
-    std::array<uint64_t,kWords> raw{};
-    std::memcpy(raw.data(),&value,sizeof(T));
+    std::array<std::byte,kWords*sizeof(uint64_t)> padded{};
+    const auto bytes=std::bit_cast<std::array<std::byte,sizeof(T)>>(value);
+    std::copy(bytes.begin(),bytes.end(),padded.begin());
+    const auto raw=std::bit_cast<std::array<uint64_t,kWords>>(padded);
     sequence_.fetch_add(1);
     for(size_t i=0;i<kWords;++i)words_[i].store(raw[i]);
     sequence_.fetch_add(1);
@@ -31,7 +33,7 @@ template<class T> class AtomicSnapshot {
       const auto a=sequence_.load();if(a&1)return false;
       std::array<uint64_t,kWords> raw{};
       for(size_t i=0;i<kWords;++i)raw[i]=words_[i].load();
-      if(a==sequence_.load()){std::array<std::byte,sizeof(T)> bytes{};std::memcpy(bytes.data(),raw.data(),sizeof(T));value=std::bit_cast<T>(bytes);return true;}
+      if(a==sequence_.load()){std::array<std::byte,sizeof(T)> bytes{};const auto padded=std::bit_cast<std::array<std::byte,kWords*sizeof(uint64_t)>>(raw);std::copy_n(padded.begin(),sizeof(T),bytes.begin());value=std::bit_cast<T>(bytes);return true;}
     }
     return false;
   }

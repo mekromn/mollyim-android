@@ -19,7 +19,11 @@ inline std::atomic<uint32_t> frame_counter{0};
 inline std::array<std::atomic<float>,6> meter_values{};
 class ReceiveProcessor {
  public:
-  void Process(webrtc::AudioFrame* frame) {
+  void Process(webrtc::AudioFrame* frame
+#ifdef MOLLY_CALL_DENOISE
+      , molly_denoise::CallTransport* denoiser = nullptr
+#endif
+  ) {
     const auto now=std::chrono::steady_clock::now();
     if(last_frame_!=std::chrono::steady_clock::time_point{} && now-last_frame_>std::chrono::milliseconds(250))processor_.Reset(true);
     last_frame_=now;
@@ -31,14 +35,34 @@ class ReceiveProcessor {
     const auto input=frame->data_view();
     if(input.size()!=count) return;
     Meters meters;
-    if(frame->muted()) {
+    bool denoised=false;
+#ifdef MOLLY_CALL_DENOISE
+    std::optional<molly_denoise::CallTransport::Lease> receive_lease;
+    if(denoiser) {
+      auto packet=molly_denoise::ReadFrame(*frame);
+      receive_lease.emplace(denoiser->PrepareReceived(packet));
+      if(!*receive_lease) {
+        frame->Mute();processor_.Reset(true);
+        meter_values[0].store(-120.f);meter_values[1].store(-120.f);
+        meter_values[2].store(0.f);meter_values[3].store(0.f);
+        return;
+      }
+      if(packet.meta.owner!=denoise_owner_||packet.meta.generation!=denoise_generation_) {
+        processor_.Reset(true);denoise_owner_=packet.meta.owner;denoise_generation_=packet.meta.generation;
+      }
+      const auto result=denoiser->ProcessReceived(packet,std::span(scratch_).first(count));
+      denoised=result.kind!=molly_denoise::OutputKind::Direct;
+      if(denoised)molly_denoise::ApplyFrameMetadata(*frame,result.source);
+    }
+#endif
+    if(frame->muted()&&!denoised) {
       processor_.PrepareSilence(settings_.enabled);
-    } else if(!settings_.enabled && processor_.bypassed()) {
+    } else if(!denoised && !settings_.enabled && processor_.bypassed()) {
       // Preserve the original int16 buffer exactly, including its mute state.
       for(size_t i=0;i<count;++i)meters.input_peak=std::max(meters.input_peak,std::abs(input[i]/32768.0f));
       meters.output_peak=meters.input_peak;
     } else {
-      for(size_t i=0;i<count;++i)scratch_[i]=input[i]/32768.0f;
+      if(!denoised)for(size_t i=0;i<count;++i)scratch_[i]=input[i]/32768.0f;
       processor_.Process(std::span(scratch_).first(count),frame->samples_per_channel(),frame->num_channels(),frame->sample_rate_hz(),settings_);
       auto pcm=frame->mutable_data(frame->samples_per_channel(),frame->num_channels());
       const bool limiting=settings_.enabled && settings_.limiter_enabled;
@@ -64,6 +88,9 @@ class ReceiveProcessor {
   Processor processor_;
   Settings settings_;
   uint32_t epoch_=0;
+#ifdef MOLLY_CALL_DENOISE
+  uint64_t denoise_owner_=0,denoise_generation_=0;
+#endif
   std::array<float,webrtc::AudioFrame::kMaxDataSizeSamples> scratch_{};
 };
 }

@@ -25,7 +25,7 @@ struct Timings {
   std::array<float,500> values{},sorted{};size_t cursor=0,count=0;double sum=0;
   void Add(float v) noexcept {sum-=values[cursor];values[cursor]=v;sum+=v;cursor=(cursor+1)%500;count=std::min(count+1,size_t{500});}
   float Mean() const noexcept{return count?static_cast<float>(sum/count):0;}
-  float P95() noexcept {if(!count)return 0;std::copy_n(values.begin(),count,sorted.begin());size_t at=(count*95+99)/100-1;std::nth_element(sorted.begin(),sorted.begin()+at,sorted.begin()+count);return sorted[at];}
+  float P95() noexcept {if(!count)return 0;std::copy_n(values.begin(),count,sorted.begin());size_t at=(count*95+99)/100-1;auto window=std::span(sorted).first(count);std::nth_element(window.begin(),window.subspan(at).begin(),window.end());return sorted[at];}
 };
 DfMeta ModelMeta(Model model) noexcept {const uint32_t look=model==Model::Standard?2:0;return {1,48000,480,960,look,5,480+480*look};}
 bool SameStream(const PacketMeta& a,const PacketMeta& b) noexcept {return a.owner==b.owner&&a.generation==b.generation&&a.rate==b.rate&&a.channels==b.channels;}
@@ -242,5 +242,6 @@ DirectionProcessor::~DirectionProcessor()=default;
 ProcessResult DirectionProcessor::Process(const OriginalPacket& input,std::span<float> output) noexcept{return impl_->Process(input,output);}
 DenoiseStatus DirectionProcessor::Status() const noexcept {DenoiseStatus result;impl_->status_bus.Read(result);if(NowUs()-result.updated_us>1500000){result.levels_valid=false;result.inference_valid=false;}return result;}
 void DirectionProcessor::Invalidate() noexcept {impl_->invalidation.fetch_add(1);impl_->Kick();}
+void DirectionProcessor::QuiescentInvalidate() noexcept {Invalidate();impl_->ClearAudio();impl_->previous.reset();}
 void DirectionProcessor::PumpForTest(){if(!impl_->threaded)impl_->Pump();}
 }

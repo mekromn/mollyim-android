@@ -12,9 +12,10 @@ CXX=${CXX:-g++}
 FLAGS=(-std=c++20 -O2 -g -pthread -Wall -Wextra -Werror)
 if [[ ${SANITIZER:-address} == thread ]]; then FLAGS+=(-fsanitize=thread); else FLAGS+=(-fsanitize=address,undefined -fno-omit-frame-pointer); fi
 EXTRA=()
-if [[ "$MODE" == worker || "$MODE" == library || "$MODE" == transport ]]; then
+if [[ "$MODE" == worker || "$MODE" == library || "$MODE" == transport || "$MODE" == service ]]; then
   EXTRA+=("$ROOT/native/call-denoise/control.cc" "$ROOT/native/call-denoise/worker.cc" "$ROOT/native/call-denoise/library.cc")
 fi
+if [[ "$MODE" == transport || "$MODE" == service ]]; then EXTRA+=("$ROOT/native/call-denoise/gate.cc" "$ROOT/native/call-denoise/transport.cc" "$ROOT/native/call-denoise/service.cc"); fi
 "$CXX" "${FLAGS[@]}" -DWEBRTC_POSIX -DWEBRTC_LINUX \
   -I "$ROOT/native/deepfilter-runtime/include" -I "$ROOT/native/call-denoise/tests/support" -I "$ROOT/native/call-denoise" -I "$WEBRTC_SOURCE" \
   "${EXTRA[@]}" "$ROOT/native/call-denoise/tests/${MODE}_test.cc" "$ROOT/native/call-denoise/timeline.cc" \

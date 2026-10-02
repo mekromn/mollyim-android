@@ -1,0 +1,150 @@
+name: DeepFilterNet call integration native build
+on:
+  push:
+    branches: [feature/deepfilternet-calls]
+    paths:
+      - 'native/call-denoise/**'
+      - 'native/incoming-audio/**'
+      - 'tools/deepfilter/patch_ringrtc.py'
+      - 'tools/deepfilter/package_native.py'
+      - 'tools/incoming-audio/build_native.sh'
+      - '.github/workflows/deepfilter-native.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: deepfilter-native-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  call-gates:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Fetch pinned integration sources
+        run: |
+          git clone --filter=blob:none --depth 1 --branch 7778d https://github.com/mollyim/webrtc.git "$RUNNER_TEMP/webrtc"
+          test "$(git -C "$RUNNER_TEMP/webrtc" rev-parse HEAD)" = 63074e7b349aff7cc6d7ff46d4f1dd3101077242
+          git clone --depth 1 --branch v2.69.5-1 https://github.com/mollyim/ringrtc.git "$RUNNER_TEMP/ringrtc"
+          echo "WEBRTC_SOURCE=$RUNNER_TEMP/webrtc" >> "$GITHUB_ENV"
+          echo "RINGRTC_SOURCE=$RUNNER_TEMP/ringrtc" >> "$GITHUB_ENV"
+      - name: Gate, ownership, worker and patch regressions
+        run: |
+          mkdir -p out/gate-reports
+          set -o pipefail
+          bash tools/deepfilter/test_host.sh transport 2>&1 | tee out/gate-reports/transport-asan.log
+          bash tools/deepfilter/test_host.sh service 2>&1 | tee out/gate-reports/service-asan.log
+          SANITIZER=thread bash tools/deepfilter/test_host.sh transport 2>&1 | tee out/gate-reports/transport-tsan.log
+          SANITIZER=thread bash tools/deepfilter/test_host.sh service 2>&1 | tee out/gate-reports/service-tsan.log
+          bash tools/deepfilter/test_host.sh worker 2>&1 | tee out/gate-reports/worker.log
+          python3 tools/deepfilter/test_native_headers.py
+          python3 tools/deepfilter/test_patch.py
+          python3 tools/deepfilter/test_native_package.py
+          bash tools/incoming-audio/test_host.sh
+          python3 tools/amoled/test_theme.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: deepfilter-call-gate-reports
+          path: out/gate-reports/
+  native-arm64:
+    needs: call-gates
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    env:
+      BUILD_JOBS: '4'
+      MOLLY_DEEPFILTER_BUILD: '1'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 40
+      - name: Check reused inference runtime source
+        run: git diff --exit-code 043492092948f7f599237e46af49b667284bcbb8 HEAD -- native/deepfilter-runtime
+      - uses: actions/download-artifact@v4
+        with:
+          name: deepfilter-runtime-android-arm64
+          run-id: 36929152476
+          github-token: ${{ github.token }}
+          path: out/runtime-android
+      - name: Verify exact Android runtime
+        run: |
+          echo 'ad1c51cc08d857378f78c42a4c7d265e855a52a919a9d0ff283efb4a794a2eb1  out/runtime-android/libmolly_deepfilter.so' | sha256sum -c -
+          python3 tools/deepfilter/verify_runtime.py out/runtime-android/libmolly_deepfilter.so
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+          cmdline-tools-version: 13114758
+          log-accepted-android-sdk-licenses: false
+      - name: Prepare native SDK
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android/sdk/ndk /opt/ghc /usr/local/.ghcup /usr/local/swift
+          sudo apt-get update
+          sudo apt-get install -y clang ninja-build cmake protobuf-compiler libglib2.0-dev pkg-config
+          sdkmanager 'ndk;28.0.13004108' 'build-tools;36.0.0' 'platforms;android-36.1'
+          df -h .
+      - uses: actions/cache/restore@v4
+        id: native-cache
+        with:
+          path: out/deepfilter-native/
+          key: call-denoise-arm64-v1-${{ hashFiles('native/call-denoise/**', 'native/incoming-audio/**', 'tools/deepfilter/patch_ringrtc.py', 'tools/deepfilter/package_native.py', 'tools/incoming-audio/build_native.sh', 'tools/incoming-audio/patch_ringrtc.py', 'native/deepfilter-runtime/Cargo.lock') }}
+      - uses: actions/cache/restore@v4
+        id: source-cache
+        if: steps.native-cache.outputs.cache-hit != 'true'
+        with:
+          path: ${{ runner.temp }}/molly-incoming-audio
+          key: molly-prepared-ubuntu24-7778d-v1-57d50b8656bfed9e42adf8de1d549ba4229cc909
+      - name: Prepare unmodified native workspace
+        if: steps.native-cache.outputs.cache-hit != 'true' && steps.source-cache.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p out/build-logs
+          set -o pipefail
+          bash tools/incoming-audio/build_native.sh prepare 2>&1 | tee out/build-logs/native-prepare.log
+      - uses: actions/cache/save@v4
+        if: steps.native-cache.outputs.cache-hit != 'true' && steps.source-cache.outputs.cache-hit != 'true'
+        continue-on-error: true
+        with:
+          path: ${{ runner.temp }}/molly-incoming-audio
+          key: ${{ steps.source-cache.outputs.cache-primary-key }}
+      - name: Compile actual patched RingRTC and package checked runtime
+        if: steps.native-cache.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p out/build-logs out/deepfilter-native
+          set -o pipefail
+          bash tools/incoming-audio/build_native.sh build 2>&1 | tee out/build-logs/native-build.log
+          python3 tools/deepfilter/package_native.py out/incoming-audio/ringrtc-incoming-audio-arm64.aar --runtime out/runtime-android/libmolly_deepfilter.so --output out/deepfilter-native/ringrtc-deepfilter-arm64.aar > out/deepfilter-native/verification.json
+          git rev-parse HEAD > out/deepfilter-native/source-revision.txt
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib,json
+          files=[]
+          for directory in ('native/call-denoise','native/incoming-audio','native/deepfilter-runtime'):
+              files += [p for p in Path(directory).rglob('*') if p.is_file() and 'target' not in p.parts and p.suffix in ('.h','.cc','.rs','.java','.inc','.toml','.lock')]
+          files += [Path(p) for p in ('tools/deepfilter/patch_ringrtc.py','tools/incoming-audio/patch_ringrtc.py','tools/incoming-audio/build_native.sh')]
+          Path('out/deepfilter-native/native-inputs.json').write_text(json.dumps({str(p):hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted(files)},indent=2))
+          PY
+      - name: Verify all new native and JNI definitions
+        run: python3 tools/deepfilter/package_native.py out/deepfilter-native/ringrtc-deepfilter-arm64.aar
+      - uses: actions/cache/save@v4
+        if: steps.native-cache.outputs.cache-hit != 'true'
+        with:
+          path: out/deepfilter-native/
+          key: ${{ steps.native-cache.outputs.cache-primary-key }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: molly-deepfilter-native-arm64
+          path: out/deepfilter-native/
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: deepfilter-native-build-reports
+          path: out/build-logs/
