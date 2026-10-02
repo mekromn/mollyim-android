@@ -1,0 +1,30 @@
+{
+  "base": "367ddba96e507f25dc297e46a25f4db806c946d6",
+  "patch_sha256": "ce8135a745575ec682ba983a06d73c87ac8e3c6bd36ba13b4f91a98dcd0bcd33",
+  "files": {
+    "app/src/androidTest/java/org/thoughtcrime/securesms/webrtc/audio/CallAudioControlsTest.kt": "2ce79386fda9ad122877458cbbd462cae3f562a1498d318e0a209fb081b4ff4d",
+    "app/src/main/java/org/thoughtcrime/securesms/components/webrtc/v2/CallAudioControls.kt": "4b2f4b1d93397bfa4bead88be99a8fc405fbd87ea2ab24fe47e0376cac0fcc77",
+    "app/src/main/java/org/thoughtcrime/securesms/components/webrtc/v2/CallControls.kt": "3c310d082bd4b29ea706a99fed2fbe405e2aeaaeb544d046163493a1979015ba",
+    "app/src/main/java/org/thoughtcrime/securesms/components/webrtc/v2/CallScreenState.kt": "5908f536364f98bca773c235a7882472a2604581c0eebe1abff10975dd4bdff7",
+    "app/src/main/java/org/thoughtcrime/securesms/components/webrtc/v2/ComposeCallScreenMediator.kt": "ade20d827a0a7ad0377d8197eacc12918ecf447c150191cc6faf2167bc52c2de",
+    "app/src/main/java/org/thoughtcrime/securesms/components/webrtc/v2/DeepFilterSection.kt": "b99f27094d024e6f30f255903d7911ee06381f517245fa0ae6e51bf9f71de625",
+    "app/src/main/java/org/thoughtcrime/securesms/components/webrtc/v2/IncomingAudioControls.kt": "9cd44d5f844a963afca8e60a2606b365ed63377c0f0b4fc1e682675a77e60c34",
+    "app/src/main/java/org/thoughtcrime/securesms/service/webrtc/SignalCallManager.java": "6aaf61a906dd4c2d03f09aa849305e36ccbe75f23a3b1f21f84f4eeb977c1e2d",
+    "app/src/main/java/org/thoughtcrime/securesms/webrtc/audio/CallDenoiseBridge.java": "34869faac0b34d2f022121222df36c59214d2a21d9dad473504fe3882e2fced8",
+    "app/src/main/java/org/thoughtcrime/securesms/webrtc/audio/CallDenoiseController.kt": "7682bd4215357b52f67a80b9aa62f8038eb6bbbaecf7f182682baa461d898ad1",
+    "app/src/main/java/org/thoughtcrime/securesms/webrtc/audio/DeepFilterAssets.kt": "ecc36bda0917f7203d308f043f57b6530128962facf3e8ee658d8cfc4c19a247",
+    "app/src/main/java/org/thoughtcrime/securesms/webrtc/audio/DenoiseCoordinator.kt": "92b064002e3bc27028e7f02ea20f73e3bf21941c5b774d46f55287ccfc9ac646",
+    "app/src/main/java/org/thoughtcrime/securesms/webrtc/audio/IncomingAudioController.kt": "9e5759e88dee256eea7117257bfb27d70c827974712d2474ce3235f13f673ef1",
+    "app/src/main/java/org/thoughtcrime/securesms/webrtc/audio/ModelAssetStore.kt": "f96c05c14b5afa2244e24daf146c41b1caac8b7ff9ae7ec4ceacc9a4e51f0120",
+    "app/src/main/res/values/call_denoise.xml": "76e557f81eaef72526d693b0c630a97914deeda3ed7609f0bf9e8aacf45fb575",
+    "app/src/test/java/org/thoughtcrime/securesms/webrtc/audio/CallDenoiseControllerTest.kt": "8a8583946e7704cff529b6a62a943d113f37304e8c370e0236c4826fc1528149",
+    "app/src/test/java/org/thoughtcrime/securesms/webrtc/audio/DeepFilterAssetsTest.kt": "2bc8651ff077bb0382a7c15efbc19413bcab38f7ba716322f08115a294f40512",
+    "docs/deepfilternet-progress.md": "576fdbb5271ede1464468e6e1be7540999ff4521fb955673783a53743a260ade",
+    "tools/deepfilter/controller-tests/ControllerContracts.kt": "da44c87c4b90fb38f8669a7f0e6b396a8c79d1ac5d5bbfa628c91b4f89913462",
+    "tools/deepfilter/test_app_wiring.py": "b482c335f9dc6703ed6b3b675a006aaec79de05e905fa678165d803931c8d23d",
+    "tools/deepfilter/test_controller.sh": "a06ceb3d48ce9220adcd683905cf4492a22a784e783c4e94b69bcffe5547c2ee",
+    "tools/deepfilter/test_controller_compile.py": "a8d96c6d4ae60028a6df759445eefac6e0f43e01edd8958ee8ecac9fddbde4f0",
+    "tools/deepfilter/test_settings.sh": "b4ea9fe8eea44f9c9c0a5c52433bc315d6eb54466007ec6ae10008a537e58c5b",
+    "tools/deepfilter/test_ui_contract.py": "e7e25b9c0a640f9af6a8dc7f922d7fd1eb0532650341ee7eec94f9dcae03e212"
+  }
+}

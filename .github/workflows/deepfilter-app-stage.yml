@@ -1,0 +1,127 @@
+name: DeepFilterNet tested app source and compilation
+on:
+  push:
+    branches: [feature/deepfilternet-calls]
+    paths: ['tools/deepfilter/staged-app.*', '.github/workflows/deepfilter-app-stage.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: deepfilter-app-stage-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  publish-source:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    outputs:
+      source: ${{ steps.commit.outputs.source }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 40
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Reconstruct exact tested source bytes
+        run: |
+          test "$GITHUB_REF" = refs/heads/feature/deepfilternet-calls
+          python3 - <<'PYCODE'
+          import base64,gzip,hashlib,json,subprocess
+          from pathlib import Path
+          manifest=json.loads(Path('tools/deepfilter/staged-app.json').read_text())
+          subprocess.run(['git','merge-base','--is-ancestor',manifest['base'],'HEAD'],check=True)
+          encoded=''.join(Path(f'tools/deepfilter/staged-app.part{n}.b64').read_text().strip() for n in range(3))
+          patch=gzip.decompress(base64.b64decode(encoded,validate=True))
+          assert len(patch)<512000 and hashlib.sha256(patch).hexdigest()==manifest['patch_sha256']
+          matched=all(Path(p).is_file() and hashlib.sha256(Path(p).read_bytes()).hexdigest()==h for p,h in manifest['files'].items())
+          if not matched:
+              subprocess.run(['git','apply','--check','-'],input=patch,check=True)
+              subprocess.run(['git','apply','-'],input=patch,check=True)
+          for p,h in manifest['files'].items():
+              assert not Path(p).is_absolute() and '..' not in Path(p).parts
+              assert hashlib.sha256(Path(p).read_bytes()).hexdigest()==h,p
+          print('Verified all',len(manifest['files']),'source files against the locally tested manifest.')
+          PYCODE
+      - name: Execute controller, assets, JNI and theme regressions
+        run: |
+          mkdir -p out/app-stage-reports
+          set -o pipefail
+          python3 tools/deepfilter/prepare_test_inputs.py
+          bash tools/deepfilter/test_settings.sh 2>&1 | tee out/app-stage-reports/junit.log
+          bash tools/deepfilter/test_controller.sh 2>&1 | tee out/app-stage-reports/controller.log
+          python3 tools/deepfilter/test_controller_compile.py 2>&1 | tee out/app-stage-reports/glue-compile.log
+          python3 tools/deepfilter/test_app_wiring.py 2>&1 | tee out/app-stage-reports/jni.log
+          python3 tools/deepfilter/test_ui_contract.py 2>&1 | tee out/app-stage-reports/ui-contract.log
+          python3 tools/amoled/test_theme.py 2>&1 | tee out/app-stage-reports/theme.log
+          git diff --check
+      - name: Commit only exact manifest source on the feature branch
+        id: commit
+        run: |
+          git config user.name 'Molly Audio build'
+          git config user.email 'builder@localhost'
+          python3 - <<'PYCODE'
+          import hashlib,json,subprocess
+          from pathlib import Path
+          manifest=json.loads(Path('tools/deepfilter/staged-app.json').read_text())
+          for p,h in manifest['files'].items():
+              assert hashlib.sha256(Path(p).read_bytes()).hexdigest()==h,p
+          subprocess.run(['git','add','--',*manifest['files']],check=True)
+          PYCODE
+          if ! git diff --cached --quiet; then
+            git fetch origin feature/deepfilternet-calls
+            test "$(git rev-parse origin/feature/deepfilternet-calls)" = "$GITHUB_SHA"
+            git commit -m 'feat(ui): add independent sent and received DeepFilterNet controls' -m 'Exact owner-approved source passed settings/controller/assets/JNI/theme regressions before publication. Android compilation is the following job, not a claim made by these host tests. Preserve account, original received effects and AMOLED.'
+            git push origin HEAD:feature/deepfilternet-calls
+          fi
+          echo "source=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          git rev-parse HEAD > out/app-stage-reports/source-revision.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: deepfilter-app-source-reports
+          path: out/app-stage-reports/
+          if-no-files-found: error
+  compile:
+    needs: publish-source
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.publish-source.outputs.source }}
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+          cmdline-tools-version: 13114758
+          log-accepted-android-sdk-licenses: false
+      - name: Prepare build SDK
+        run: |
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/.ghcup /usr/local/swift
+          sdkmanager 'build-tools;36.0.0' 'platforms;android-36.1' 'ndk;28.0.13004108'
+      - uses: gradle/actions/setup-gradle@v6
+      - name: Compile actual Android and Compose sources
+        run: |
+          chmod +x gradlew
+          mkdir -p out/app-compile
+          set -o pipefail
+          common=(--no-daemon --no-parallel --max-workers=1
+            '-Dorg.gradle.jvmargs=-Xmx12g -XX:+UseParallelGC -XX:MaxMetaspaceSize=1g'
+            -Pkotlin.compiler.execution.strategy=in-process
+            -PbasePackageId=com.mekromn.mollyaudio
+            '-PbaseAppTitle=Molly Audio' -PbaseAppFileName=Molly-Audio)
+          ./gradlew "${common[@]}" :app:compileProdStoreReleaseKotlin :app:compileProdStoreReleaseJavaWithJavac 2>&1 | tee out/app-compile/compile.log
+          git rev-parse HEAD > out/app-compile/source-revision.txt
+          printf '%s\n' 'Source compilation only. This workflow neither assembles nor publishes a DeepFilterNet APK.' > out/app-compile/boundary.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: deepfilter-app-compile-reports
+          path: out/app-compile/
+          if-no-files-found: error
