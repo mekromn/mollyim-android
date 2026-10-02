@@ -31,6 +31,13 @@ jobs:
           tar -tzf "$RUNNER_TEMP/webrtc-source.tar.gz" > /dev/null
           mv "$RUNNER_TEMP/webrtc-source.tar.gz" out/dev-snapshot/
           sha256sum out/dev-snapshot/webrtc-source.tar.gz > out/dev-snapshot/webrtc-source.sha256
+      - name: Export pinned RingRTC sources for call gate integration
+        run: |
+          git clone --depth 1 --branch v2.69.5-1 https://github.com/mollyim/ringrtc.git "$RUNNER_TEMP/ringrtc-audit"
+          test "$(git -C "$RUNNER_TEMP/ringrtc-audit" rev-parse refs/tags/v2.69.5-1)" = e05d1475a96806acad749da8030ea4b73cc5fdb4
+          git -C "$RUNNER_TEMP/ringrtc-audit" archive --format=tar.gz HEAD > out/dev-snapshot/ringrtc-source.tar.gz
+          git -C "$RUNNER_TEMP/ringrtc-audit" rev-parse HEAD > out/dev-snapshot/ringrtc-revision.txt
+          sha256sum out/dev-snapshot/ringrtc-source.tar.gz > out/dev-snapshot/ringrtc-source.sha256
       - uses: actions/upload-artifact@v4
         if: always()
         with:

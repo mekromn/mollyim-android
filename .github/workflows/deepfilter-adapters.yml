@@ -66,6 +66,23 @@ jobs:
           set -o pipefail
           bash tools/deepfilter/test_host.sh real_timeline 2>&1 | tee out/adapter-reports/real-models.log
           git rev-parse HEAD > out/adapter-reports/source-revision.txt
+      - name: Independent workers and cancellation under ASan and UBSan
+        run: |
+          set -o pipefail
+          bash tools/deepfilter/test_host.sh worker 2>&1 | tee out/adapter-reports/worker-asan.log
+      - name: Worker and settings concurrency under ThreadSanitizer
+        env:
+          SANITIZER: thread
+        run: |
+          set -o pipefail
+          bash tools/deepfilter/test_host.sh worker 2>&1 | tee out/adapter-reports/worker-tsan.log
+      - name: Real worker runtime versus independent upstream reference
+        env:
+          DF_HOST_RUNTIME: ${{ github.workspace }}/out/df-host/libmolly_deepfilter.so
+          DF_REFERENCE_ROOT: ${{ github.workspace }}/out/df-reference
+        run: |
+          set -o pipefail
+          bash tools/deepfilter/test_host.sh library 2>&1 | tee out/adapter-reports/worker-real-models.log
       - uses: actions/upload-artifact@v4
         if: always()
         with:

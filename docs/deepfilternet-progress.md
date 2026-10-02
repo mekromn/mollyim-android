@@ -1,75 +1,83 @@
 # DeepFilterNet call integration checkpoint
 
-Updated 2026-10-02. This is a development checkpoint, **not an APK release**.
-The owner approved the specification, implementation plan, and execution in this
-chat. Continue that plan without repeating approval or rebuilding finished tasks.
+Updated 2026-10-02. Development checkpoint, **not an APK release**.
+The owner approved the specification, plan and execution. Continue without
+another approval round. Preserve the installed AMOLED build and account.
 
-## Implemented before this checkpoint
+## Completed source work
 
-Tasks 1 and 2 have real code on `feature/deepfilternet-calls`: independent settings,
-checked model provenance, fallible Rust inference, both actual model reference
-tests, and Android ARM64 cross-compilation. Source checkpoint `0434920` produced
-host runtime run `36929152545` and Android run `36929152476`. The latter establishes
-compilation and ELF checks, not on-device inference or a live call.
+Tasks 1–2: independent settings, pinned model provenance, checked Rust runtime,
+both real-model reference tests and ARM64 cross-compilation. Runtime source
+`0434920` produced host run `36929152545` and Android run `36929152476`.
+Cross-compilation/ELF checks are not Android execution or phone-call tests.
 
-## Task 3: bounded, source-timed audio adapters
+Task 3: fixed-capacity packets, SPSC queues, matched original history, source-
+interval metadata and real WebRTC rate conversion. Commit `9049551` passed
+adapter CI `36977172413`, including all 16 model/rate/channel combinations.
 
-Implemented fixed-capacity input/output packet types, single-producer/single-
-consumer queues, matched original-audio history, source-interval/timestamp
-calculation, worker-owned real WebRTC converters, and fixed alignment padding.
-No live call hooks are connected yet. A partial stereo failure clears the result
-and poisons the adapter until replacement; changed owner/generation or missing
-input cannot resume an old partially advanced stream.
+The pinned push converter's integer priming makes native round-trip delay
+19/22/27 samples at 8/16/32 kHz, not just its half-kernel estimate. Exact padding
+keeps the planned total budgets: Standard 50 ms at 48 kHz / 60 ms below; Low
+Latency 30 ms / 40 ms. These include the 20 ms worker allowance, not network
+latency or measured Pixel performance. Attenuation zero is upstream immediate
+copy, so our worker treats it as aligned dry bypass instead of delayed wet audio.
 
-The new tests first failed with the adapter missing. Additional tests reproduced
-an incorrect converter-delay assumption, invalid-plan division by zero, and
-partially filled stereo output on an engine failure. Those cases now pass.
+## Task 4: independent workers
 
-### Timing decision recorded during implementation
+Implemented an event-driven worker per constructed direction. Dormant workers
+sleep while Off. Callbacks do not create threads, load models, run inference,
+or wait for the settings writer mutex. Fixed queues keep matched dry fallback;
+Stable Off returns Direct without denoising resampling or submitted audio.
+Comparison bypass and zero attenuation suspend inference but keep alignment.
 
-The plan's half-kernel formula is an estimate, not the complete delay of the
-pinned push converter's integer priming. `PushSincResampler` discards a truncated
-`ChunkSize()` on first use. Measured round-trip native-rate delays are **19, 22,
-and 27 samples** at 8, 16, and 32 kHz. Use those integer delays, followed by exact
-integer padding. This removes the observed phase offset without adding another
-interpolation filter. The planned total 10 ms block budgets remain unchanged:
-Standard 50 ms at 48 kHz / 60 ms below; Low Latency 30 ms / 40 ms. These are adapter
-budgets including a future 20 ms worker allowance, not network-call latency or
-measured Pixel performance. The scheduling worker itself is Task 4.
+Model changes release old contexts before replacement. Internal request epochs
+reject stale model completions without relabeling external owner/generation
+stamps. Scalar parameter edits use coherent atomic-word snapshots without
+resetting the stream. A failed cache is evicted so explicit Retry can use repaired
+assets. Three consecutive eligible misses or 26 misses in a full 500-callback
+window latch only that direction. Unsupported formats cannot reset that latch.
+Turning Off uses a bounded two-block transition to Direct.
 
-The unmodified upstream runtime immediately copies input at attenuation zero;
-it does not preserve normal model lookahead then. Task 4 must treat zero as
-aligned dry bypass rather than run it as a delayed wet result.
+`DirectionProcessor::Invalidate()` cancels in-flight work and requests release
+without needing another audio callback. This is a primitive for Task 5, **not a
+completed call-mute connection**. Model loading, reset, joining and destruction
+remain off callbacks. Fatal native stalls, aborts and OOM are not recoverable
+bypass promises. External owners still must keep control/factory objects alive
+until workers have stopped.
 
-## Verification boundaries
+## Fresh verification for Task 4
 
-Fresh host ASan/UBSan and ThreadSanitizer queue/timing tests pass, including
-100,000 concurrently transferred packets and sequence wrap. Tests compile the
-actual pinned WebRTC resampler sources (`63074e7`); host-only compatibility
-headers replace logging/check plumbing and CPU dispatch, not the converters.
+- 19 worker/control regressions pass under ASan/UBSan and separately TSan:
+  actual threaded load cancellation, concurrent coherent edits, 100,000 callback
+  iterations checked for allocation, failure isolation, model changes, matched
+  fallback, zero attenuation, and overload persistence.
+- Both real models load through the new dynamic runtime factory. Repeated reset,
+  silent-channel isolation and real-worker output match independent upstream
+  vectors. Host maximum error: Standard 0; Low Latency 1.49012e-08. The worker
+  reference harness is deterministic, not a phone performance benchmark.
+- Seven existing Python provenance/build/lock tests pass. Existing ten DSP tests,
+  sanitizer, three patch fixtures, strict integration-header fixture and standalone
+  incoming settings checks pass. Six AMOLED theme tests and the existing timeline
+  adapter tests pass. Production worker files compile with no exceptions or RTTI.
+- Full Android Gradle and Kotlin JUnit settings tests were not run locally: the
+  SDK/JUnit fixture set is absent. The required host-runtime fixture path was
+  restored to the verified artifact before rerunning the Python suite. CI provides
+  Android/Gradle checks separately; they are not implied by host tests.
 
-Both actual DeepFilterNet3 models match the independent upstream reference
-vectors within 1e-5 maximum absolute sample error. Real-model delay tests cover
-all 16 combinations of 8/16/32/48 kHz, mono/stereo and Standard/Low Latency,
-with zero-sample peak-position residual and a silent second channel. Delay
-calibration deliberately keeps the processing stages transparent and supplies
-a small pedestal on the active channel to avoid the upstream low-RMS early
-return. Ordinary noisy-speech denoising is checked separately by the reference
-vectors; the calibration is not presented as a quality benchmark.
+The loaded Rust library is a verified release artifact, not sanitizer-
+instrumented. Worker/adapter test code is instrumented. No physical phone,
+live call, new call-screen UI, or complete DeepFilterNet APK is verified here.
 
-The downloaded host runtime is not sanitizer-instrumented; the adapter and
-converter test code are. None of these tests establish phone-call behavior,
-microphone privacy gates, Bluetooth routing, or Android UI rendering.
+## Resume next — Task 5, not Task 1
 
-## Resume next
+Read `docs/superpowers/plans/2026-10-01-deepfilternet-calls.md` and the approved
+specification. Continue authoritative owner/generation gates for one-to-one,
+group and remote mute, both call hooks and lifecycle handling. Then finish
+assets/controller, two-tab UI, patched RingRTC compilation and signed update.
+Do not merge automatically or recreate completed model/adapter implementations.
 
-Task 4: independent workers, coherent controls, aligned fallback, overload latch,
-state/diagnostic snapshots and bounded teardown. Then Task 5 authoritative mute
-and call hooks, Task 6 persistent controller/assets, Task 7 two-tab UI, Task 8
-actual optimized APK and same-key signing. Task 9 physical calls remains a
-separate, explicitly reported acceptance step.
-
-Preserve `com.mekromn.mollyaudio`, AMOLED, received EQ settings, original signing
-certificate, and logged-in account. Next APK version is 171906. Never generate a
-replacement signing key, clear app data, modify registration, or call the current
-171905 APK a DeepFilterNet build.
+Keep package `com.mekromn.mollyaudio`, AMOLED and received EQ settings. Next APK
+version is 171906. Reuse signing certificate
+`eb6825c9abab77a52cf12444d078d4b808c4c708ec31efaf8c59b0adf686557b`.
+Never generate a replacement key, clear data, modify registration, or label the
+installed 171905 APK a DeepFilterNet build.

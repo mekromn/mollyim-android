@@ -11,9 +11,13 @@ fi
 CXX=${CXX:-g++}
 FLAGS=(-std=c++20 -O2 -g -pthread -Wall -Wextra -Werror)
 if [[ ${SANITIZER:-address} == thread ]]; then FLAGS+=(-fsanitize=thread); else FLAGS+=(-fsanitize=address,undefined -fno-omit-frame-pointer); fi
+EXTRA=()
+if [[ "$MODE" == worker || "$MODE" == library || "$MODE" == transport ]]; then
+  EXTRA+=("$ROOT/native/call-denoise/control.cc" "$ROOT/native/call-denoise/worker.cc" "$ROOT/native/call-denoise/library.cc")
+fi
 "$CXX" "${FLAGS[@]}" -DWEBRTC_POSIX -DWEBRTC_LINUX \
   -I "$ROOT/native/deepfilter-runtime/include" -I "$ROOT/native/call-denoise/tests/support" -I "$ROOT/native/call-denoise" -I "$WEBRTC_SOURCE" \
-  "$ROOT/native/call-denoise/tests/${MODE}_test.cc" "$ROOT/native/call-denoise/timeline.cc" \
+  "${EXTRA[@]}" "$ROOT/native/call-denoise/tests/${MODE}_test.cc" "$ROOT/native/call-denoise/timeline.cc" \
   "$ROOT/native/call-denoise/tests/support/platform.cc" \
   "$WEBRTC_SOURCE/common_audio/resampler/push_sinc_resampler.cc" \
   "$WEBRTC_SOURCE/common_audio/resampler/sinc_resampler.cc" \
