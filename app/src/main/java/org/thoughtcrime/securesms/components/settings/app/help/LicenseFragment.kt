@@ -37,6 +37,8 @@ class LicenseFragment : ComposeFragment() {
     val textState: State<List<String>> = Single
       .fromCallable {
         requireContext().resources.openRawResource(R.raw.third_party_licenses).readToLines() +
+          requireContext().resources.openRawResource(R.raw.deepfilter_notices).readToLines() +
+          (if (requireContext().assets.list("deepfilter")?.contains("notices.txt") == true) requireContext().assets.open("deepfilter/notices.txt").readToLines() else emptyList()) +
           requireContext().assets.open("acknowledgments/libsignal.md").readToLines() +
           requireContext().assets.open("acknowledgments/ringrtc.md").readToLines()
       }
