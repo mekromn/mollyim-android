@@ -24,6 +24,19 @@ class ReleaseTests(unittest.TestCase):
   m=self.module()
   # A descriptor/name appearing only in strings does not prove a class method survived.
   with self.assertRaises(ValueError):m.verify_dexdump("CallDenoiseBridge nativeVersion ()I",m.JNI)
+ def test_sdk_resource_headers_are_package_relative(self):
+  from unittest.mock import patch
+  m=self.module()
+  badge="package: name='com.mekromn.mollyaudio' versionCode='171906' versionName='8.19.2-4'\nsdkVersion:'27'\ntargetSdkVersion:'35'\nnative-code: 'arm64-v8a'\n"
+  # AAPT2 Debug::PrintTable intentionally omits the enclosing package name.
+  resources="Package name=com.mekromn.mollyaudio id=7f\n  type raw id=13 entryCount=1\n    resource 0x7f130010 raw/deepfilter_notices\n      () (file) res/a1.txt\n"
+  with tempfile.TemporaryDirectory() as d:
+   apk=Path(d)/'fixture.apk'
+   with zipfile.ZipFile(apk,'w') as z:z.writestr('AndroidManifest.xml',b'fixture')
+   with patch.object(m.subprocess,'check_output',side_effect=[badge,resources]),patch.object(m,'verify_dexdump',return_value={}):
+    self.assertEqual(m.verify_sdk(apk,Path('aapt2'),Path('dexdump'))['version_code'],171906)
+   with patch.object(m.subprocess,'check_output',side_effect=[badge,'unrelated :raw/deepfilter_notices reference']):
+    with self.assertRaises(ValueError):m.verify_sdk(apk,Path('aapt2'),Path('dexdump'))
  def test_manifest_input_hashes(self):
   m=self.module()
   with tempfile.TemporaryDirectory() as d:

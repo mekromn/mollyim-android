@@ -97,7 +97,7 @@ def verify_sdk(apk,aapt2,dexdump):
  badging=subprocess.check_output([str(aapt2),'dump','badging',str(apk)],text=True)
  result=verify_badging(badging)
  resources=subprocess.check_output([str(aapt2),'dump','resources',str(apk)],text=True)
- if ':raw/deepfilter_notices' not in resources:raise ValueError('Attribution resource removed by shrinking')
+ if not re.search(r'^\s*resource 0x[0-9a-fA-F]{8} (?:[a-zA-Z0-9_.]+:)?raw/deepfilter_notices(?:\s|$)',resources,re.M):raise ValueError('Attribution resource removed by shrinking')
  dumps=[]
  with zipfile.ZipFile(apk) as z,tempfile.TemporaryDirectory() as td:
   for name in z.namelist():
