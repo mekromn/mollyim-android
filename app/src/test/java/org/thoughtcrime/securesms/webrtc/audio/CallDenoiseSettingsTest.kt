@@ -47,10 +47,13 @@ class CallDenoiseSettingsTest {
   @Test fun serialization_round_trip() {
     val original = DenoiseSettings(enabled=true,model=Model.LOW_LATENCY,attenuationDb=45f,postFilter=true,beta=0.032f)
     assertEquals(original,DenoiseSettings.fromStored(original.toStored()))
+    val mobile = original.copy(model=Model.MOBILE_FUSED)
+    assertEquals(mobile,DenoiseSettings.fromStored(mobile.toStored()))
     assertEquals(DenoiseSettings(), DenoiseSettings.fromStored(original.toStored()+mapOf("model" to "88")))
     assertEquals(DenoiseSettings(), DenoiseSettings.fromStored(original.toStored()+mapOf("version" to "99")))
     assertEquals(DenoiseSettings(), DenoiseSettings.fromStored(original.toStored()+mapOf("attenuationDb" to "NaN")))
     assertEquals(0,Direction.RECEIVED.wireId); assertEquals(1,Direction.SENT.wireId)
-    assertEquals(0,Model.STANDARD.wireId); assertEquals(1,Model.LOW_LATENCY.wireId)
+    assertEquals(0,Model.STANDARD.wireId); assertEquals(1,Model.LOW_LATENCY.wireId); assertEquals(2,Model.MOBILE_FUSED.wireId)
+    assertEquals("DeepFilterNet3_onnx_mobile.tar.gz",Model.MOBILE_FUSED.asset)
   }
 }
