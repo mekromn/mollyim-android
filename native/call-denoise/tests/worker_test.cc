@@ -58,7 +58,10 @@ void three_misses_enter_safe_fallback_but_worker_recovers(){
   Harness h;h.Enable();
   for(int n=0;n<12;++n)h.Step(n);
   for(int n=12;n<19;++n)h.Step(n,false);
-  assert(h.receive.Status().state==EffectiveState::Overloaded);
+  const auto overloaded=h.receive.Status();
+  assert(overloaded.state==EffectiveState::Overloaded);
+  assert(overloaded.inference_valid);
+  assert(overloaded.processed>0);
   const int count=h.factory.processed;
   bool recovered=false;
   for(int n=19;n<90;++n){
