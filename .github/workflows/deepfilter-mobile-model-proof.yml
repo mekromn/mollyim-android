@@ -1,0 +1,69 @@
+name: DeepFilter mobile fused model proof
+on:
+  push:
+    branches: [feature/mock-call-lab]
+    paths:
+      - '.github/workflows/deepfilter-mobile-model-proof.yml'
+      - 'tools/deepfilter/mobile-model.lock.json'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  proof:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch exact Kaleyra mobile model revision
+        run: |
+          set -euo pipefail
+          repo="$RUNNER_TEMP/kaleyra-deepfilter"
+          git init "$repo"
+          git -C "$repo" remote add origin https://github.com/KaleyraVideo/DeepFilterNet.git
+          git -C "$repo" fetch --depth 1 origin ee6505ab4e899d3bef734427e627a266b6fef441
+          test "$(git -C "$repo" rev-parse FETCH_HEAD)" = ee6505ab4e899d3bef734427e627a266b6fef441
+          git -C "$repo" checkout --detach FETCH_HEAD
+          mkdir -p out/mobile-model
+          cp "$repo/models/DeepFilterNet3_onnx_mobile.tar.gz" out/mobile-model/
+          cp "$repo/LICENSE" "$repo/LICENSE-APACHE" "$repo/LICENSE-MIT" out/mobile-model/
+      - name: Prove git blob and derive cryptographic model manifest
+        run: |
+          python3 - <<'PY'
+          import configparser,hashlib,io,json,tarfile
+          from pathlib import Path, PurePosixPath
+          p=Path('out/mobile-model/DeepFilterNet3_onnx_mobile.tar.gz')
+          data=p.read_bytes()
+          def git_blob(b):
+              return hashlib.sha1(b'blob '+str(len(b)).encode()+b'\0'+b).hexdigest()
+          assert len(data)==7984565, len(data)
+          assert git_blob(data)=='c13aee93c3062b31c22c8d9667c708cb2058f80d'
+          members=[];config=None
+          with tarfile.open(fileobj=io.BytesIO(data),mode='r:gz') as archive:
+              for m in archive:
+                  path=PurePosixPath(m.name)
+                  assert m.isfile() and not path.is_absolute() and '..' not in path.parts
+                  f=archive.extractfile(m); assert f is not None
+                  b=f.read(); assert len(b)==m.size
+                  members.append({'path':m.name,'bytes':len(b),'sha256':hashlib.sha256(b).hexdigest()})
+                  if path.name=='config.ini':
+                      config=configparser.ConfigParser(interpolation=None);config.read_string(b.decode())
+          assert config is not None
+          df=config['df'];model=config['deepfilternet']
+          look=max(int(model['conv_lookahead']),int(df.get('df_lookahead',model.get('df_lookahead','-1'))))
+          meta={'sample_rate':int(df['sr']),'hop':int(df['hop_size']),'fft':int(df['fft_size']),'lookahead':look,
+                'df_order':int(df.get('df_order',model.get('df_order','-1'))),'erb_bands':int(df['nb_erb']),'df_bins':int(df['nb_df'])}
+          meta['intrinsic_delay']=meta['fft']-meta['hop']+look*meta['hop']
+          report={'id':'mobile_fused','wire_id':2,'asset':p.name,
+                  'source_repository':'KaleyraVideo/DeepFilterNet',
+                  'source_revision':'ee6505ab4e899d3bef734427e627a266b6fef441',
+                  'source_path':'models/DeepFilterNet3_onnx_mobile.tar.gz',
+                  'bytes':len(data),'git_blob_sha1':git_blob(data),'sha256':hashlib.sha256(data).hexdigest(),
+                  'members':members,'meta':meta}
+          Path('out/mobile-model/manifest-derived.json').write_text(json.dumps(report,indent=2))
+          print(json.dumps(report,indent=2))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: deepfilter-mobile-fused-model
+          path: out/mobile-model/
+          if-no-files-found: error
