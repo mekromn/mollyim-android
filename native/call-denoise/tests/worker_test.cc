@@ -18,7 +18,7 @@ void operator delete(void* p,std::size_t) noexcept {std::free(p);}
 struct FakeFactory final:EngineFactory {
   struct Engine final:StreamingEngine {
     FakeFactory& f; DfMeta meta;std::array<float,1440> delay{};size_t pos=0;
-    Engine(FakeFactory& f,uint32_t model):f(f),meta{1,48000,480,960,model==0?2u:0u,5,model==0?1440u:480u}{++f.live;f.max_live=std::max(f.max_live,f.live);}
+    Engine(FakeFactory& f,uint32_t model):f(f),meta{1,48000,480,960,model==1?0u:2u,5,model==1?480u:1440u}{++f.live;f.max_live=std::max(f.max_live,f.live);}
     ~Engine() override{--f.live;}
     DfMeta Metadata() const noexcept override{return meta;}
     bool Configure(const DfConfig& c) noexcept override{f.last=c;++f.configured;return true;}
