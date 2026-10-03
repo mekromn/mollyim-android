@@ -55,6 +55,9 @@ fun main(){
   c.selectSource(Direction.RECEIVED,take.id,0).get()
   c.play().get();check(opens==1&&engine.microphoneStarts==0)
   c.pause().get();check(engine.data[4]==1f)
+  c.selectRoute(2).get()
+  check(route.selected?.id==2 && c.view.value.actualRoute=="Speakerphone") {"Idle native route selection must change the actual communication device, not only the requested ID"}
+  check(engine.microphoneStarts==0) {"Selecting a route must not open the microphone"}
   c.setMode(LabMode.SENT).get();c.record().get();check(engine.microphoneStarts==1)
   engine.queued=2;engine.sourceStart=0
   c.pause().get()
