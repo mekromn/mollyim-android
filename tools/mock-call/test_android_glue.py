@@ -61,4 +61,43 @@ class SignalAudioManager {enum class AudioDevice {NONE};interface EventListener 
  result=subprocess.run(['kotlinc',*files,'-cp',str(coroutines),'-d',str(w/'glue.jar')],capture_output=True,text=True)
  if result.returncode:
   print(result.stdout+result.stderr);raise SystemExit(result.returncode)
+ # A second compile/run includes the patched class fixture and exercises the
+ # cached reflective control-plane bridge. The first compile above proves the
+ # ordinary repository build does not require that class.
+ patched=write('MockCallSession.kt','''package org.signal.ringrtc
+import android.content.Context
+class MockCallSession private constructor() {
+  fun configure(v:FloatArray)=41L
+  fun command(op:Int,a:Long,b:Long,c:Long,d:Long)=42L
+  fun load(d:Int,r:Int,c:Int,p:ShortArray)=43L
+  fun status(v:FloatArray)=true
+  fun drain(t:Int,m:LongArray,p:FloatArray)=44
+  fun revoke(){}
+  fun close(){}
+  companion object { @JvmStatic fun create(c:Context,a:AudioConfig)=MockCallSession() }
+}
+''')
+ main=write('ReflectiveCheck.kt','''package org.thoughtcrime.securesms.webrtc.audio.mock
+import android.content.Context
+fun main() {
+  val env=LabAndroidHardware.environment(Context(),LabToken(1,1))
+  val hardware=env.acquire()
+  check(hardware.native.configure(FloatArray(41))==41L)
+  check(hardware.native.command(1,2,3,4,5)==42L)
+  check(hardware.native.load(0,48000,1,ShortArray(480))==43L)
+  check(hardware.native.status(FloatArray(128)))
+  check(hardware.native.drain(0,LongArray(16),FloatArray(3840))==44)
+  hardware.native.revoke()
+  hardware.native.close()
+  println("PASS cached reflective adapter resolves patched MockCallSession API")
+}
+''')
+ runtimeJar=w/'runtime.jar'
+ result=subprocess.run(['kotlinc',*files,patched,main,'-cp',str(coroutines),'-include-runtime','-d',str(runtimeJar)],capture_output=True,text=True)
+ if result.returncode:
+  print(result.stdout+result.stderr);raise SystemExit(result.returncode)
+ result=subprocess.run(['java','-cp',str(runtimeJar)+':'+str(coroutines),'org.thoughtcrime.securesms.webrtc.audio.mock.ReflectiveCheckKt'],capture_output=True,text=True)
+ if result.returncode:
+  print(result.stdout+result.stderr);raise SystemExit(result.returncode)
+ print(result.stdout.strip())
  print('PASS complete production/lab session adapters compile against stock RingRTC API without the lab-only MockCallSession class (API fixtures, NOT device execution).')
