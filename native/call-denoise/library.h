@@ -22,7 +22,7 @@ class EngineFactory {
 class RuntimeFactory final:public EngineFactory {
  public:
   // Caller supplies application-private verified paths, never audio URIs.
-  RuntimeFactory(std::string library_path,std::array<std::string,2> model_paths);
+  RuntimeFactory(std::string library_path,std::array<std::string,3> model_paths);
   ~RuntimeFactory() override;
   std::unique_ptr<StreamingEngine> Create(Model,uint32_t,const DfConfig&) override;
  private:
