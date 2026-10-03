@@ -2,7 +2,15 @@ name: Mock call native build
 on:
   push:
     branches: [feature/mock-call-lab]
-    paths: ['.github/workflows/mock-call-native.yml']
+    paths:
+      - 'native/mock-call/**'
+      - 'tools/mock-call/**'
+      - 'native/call-denoise/**'
+      - 'native/incoming-audio/**'
+      - 'tools/deepfilter/patch_ringrtc.py'
+      - 'tools/deepfilter/package_native.py'
+      - 'tools/incoming-audio/build_native.sh'
+      - '.github/workflows/mock-call-native.yml'
   workflow_dispatch:
 permissions:
   contents: read
@@ -11,55 +19,15 @@ concurrency:
   group: mock-call-native-${{ github.ref }}
   cancel-in-progress: false
 jobs:
-  publish-source:
+  source-checks:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
-    permissions:
-      contents: write
-    outputs:
-      revision: ${{ steps.commit.outputs.revision }}
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 100
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '21'
-      - name: Import exact tested source checkpoint
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          test "$GITHUB_REF" = refs/heads/feature/mock-call-lab
-          mkdir -p out/mock-reports
-          python3 - <<'PYCODE'
-          import base64,gzip,hashlib,json,subprocess
-          from pathlib import Path
-          blobs=['9146f5009324fec7b12e9d550a34d6da37c24caf','484bb444060e1067ce1bbb76971ffd5c7d3c4be3','8b5e11d2ec33320071fead05bcef4f943010d316','00519441a2c37b6c7e27b07eda271228779da3ee']
-          parts=[]
-          for i,sha in enumerate(blobs):
-              record=json.loads(subprocess.check_output(['gh','api','repos/mekromn/mollyim-android/git/blobs/'+sha]))
-              data=base64.b64decode(record['content']).decode()
-              Path(f'out/mock-reports/source-part-{i}.txt').write_text(data)
-              parts.append(data)
-          # Correct transcription only; the complete patch SHA below is the authority.
-          for bad,good in [('sNMvUTTKO','sNMvUTKO'),('DsCz04ZZmq','DsCz04Zmq'),('OMIPLuT23iOMIPLuT23iXiUB','OMIPLuT23iXiUB'),('ZNQuEU5e5HO','ZNQuEI5e5HO')]:
-              parts[0]=parts[0].replace(bad,good)
-          b=parts[0].encode()
-          assert hashlib.sha1(b'blob '+str(len(b)).encode()+b'\0'+b).hexdigest()=='46fcefcfd69aa63644151bc3c0ea2146a13b8344','Source transcription differs; refusing to apply'
-          patch=gzip.decompress(base64.b64decode(''.join(parts),validate=True))
-          assert len(patch)==133842 and hashlib.sha256(patch).hexdigest()=='4e829b9052e907094d25fa7e53586c2f20cfe28855a969046856e40a3b2790f1'
-          subprocess.run(['git','merge-base','--is-ancestor','39d709109506eedda5149fa0e0087525243bbb55','HEAD'],check=True)
-          numstat=subprocess.check_output(['git','apply','--numstat','-'],input=patch).decode()
-          paths=[l.split('\t')[2] for l in numstat.splitlines()]
-          assert len(paths)==46 and len(set(paths))==46
-          for name in paths:assert not Path(name).is_absolute() and '..' not in Path(name).parts
-          subprocess.run(['git','apply','--check','-'],input=patch,check=True)
-          subprocess.run(['git','apply','-'],input=patch,check=True)
-          Path('out/mock-reports/import-paths.json').write_text(json.dumps(paths))
-          Path('out/mock-reports/import-hashes.json').write_text(json.dumps({name:hashlib.sha256(Path(name).read_bytes()).hexdigest() for name in paths},indent=2))
-          print('Verified exact patch and imported',len(paths),'source files.')
-          PYCODE
       - name: Fetch pinned integration sources
         run: |
           git clone --filter=blob:none --depth 1 --branch 7778d https://github.com/mollyim/webrtc.git "$RUNNER_TEMP/webrtc"
@@ -67,32 +35,25 @@ jobs:
           git clone --depth 1 --branch v2.69.5-1 https://github.com/mollyim/ringrtc.git "$RUNNER_TEMP/ringrtc"
           echo "WEBRTC_SOURCE=$RUNNER_TEMP/webrtc" >> "$GITHUB_ENV"
           echo "RINGRTC_SOURCE=$RUNNER_TEMP/ringrtc" >> "$GITHUB_ENV"
-      - name: Scope, hardware lifetime and source-path regression checks
+      - name: Preserve exact sources before testing
         run: |
           mkdir -p out/mock-reports
+          git archive --format=tar.gz HEAD > out/mock-reports/source.tar.gz
+          git rev-parse HEAD > out/mock-reports/revision.txt
+          git -C "$WEBRTC_SOURCE" archive --format=tar.gz HEAD common_audio api/audio audio rtc_base system_wrappers > out/mock-reports/webrtc-source.tar.gz
+          git -C "$RINGRTC_SOURCE" archive --format=tar.gz HEAD > out/mock-reports/ringrtc-source.tar.gz
+      - name: Scope, endpoint, strict-header and patch regressions
+        run: |
           set -o pipefail
+          CXX=clang++ python3 tools/mock-call/test_header_policy.py 2>&1 | tee out/mock-reports/header-policy.log
           bash tools/mock-call/test_scope.sh 2>&1 | tee out/mock-reports/scope.log
           SANITIZER=thread bash tools/mock-call/test_scope.sh 2>&1 | tee out/mock-reports/scope-tsan.log
-          python3 tools/mock-call/test_endpoint_api.py 2>&1 | tee out/mock-reports/endpoint-api-fixture.log
-          CXX=clang++ MOCK_STRICT=1 python3 tools/mock-call/test_endpoint_api.py 2>&1 | tee out/mock-reports/strict-headers.log
+          python3 tools/mock-call/test_endpoint_api.py 2>&1 | tee out/mock-reports/endpoint.log
+          CXX=clang++ MOCK_STRICT=1 python3 tools/mock-call/test_endpoint_api.py 2>&1 | tee out/mock-reports/strict.log
           python3 tools/mock-call/test_patch.py 2>&1 | tee out/mock-reports/patch.log
           bash tools/incoming-audio/test_host.sh 2>&1 | tee out/mock-reports/incoming.log
           python3 tools/amoled/test_theme.py 2>&1 | tee out/mock-reports/theme.log
           git diff --check
-      - name: Publish source only after checks
-        id: commit
-        run: |
-          python3 - <<'PYCODE'
-          import json,subprocess
-          from pathlib import Path
-          paths=json.loads(Path('out/mock-reports/import-paths.json').read_text())
-          subprocess.run(['git','add','--',*paths],check=True)
-          PYCODE
-          git config user.name "Molly Audio build"
-          git config user.email "builder@localhost"
-          git commit -m "feat(mock): isolate controls and add native call endpoint and recording taps"
-          git push origin HEAD:feature/mock-call-lab
-          echo "revision=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -100,7 +61,7 @@ jobs:
           path: out/mock-reports/
           if-no-files-found: error
   native-arm64:
-    needs: publish-source
+    needs: source-checks
     runs-on: ubuntu-24.04
     timeout-minutes: 180
     env:
@@ -111,7 +72,6 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 100
-          ref: ${{ needs.publish-source.outputs.revision }}
       - name: Check reused inference runtime source
         run: git diff --exit-code 043492092948f7f599237e46af49b667284bcbb8 HEAD -- native/deepfilter-runtime
       - uses: actions/download-artifact@v4
@@ -144,7 +104,7 @@ jobs:
         id: native-cache
         with:
           path: out/mock-native/
-          key: mock-call-arm64-v1-${{ hashFiles('native/mock-call/**', 'tools/mock-call/patch_ringrtc.py', 'tools/mock-call/verify_native.py', 'native/call-denoise/**', 'native/incoming-audio/**', 'tools/deepfilter/patch_ringrtc.py', 'tools/deepfilter/package_native.py', 'tools/incoming-audio/build_native.sh', 'tools/incoming-audio/patch_ringrtc.py', 'native/deepfilter-runtime/Cargo.lock') }}
+          key: mock-call-arm64-v2-${{ hashFiles('native/mock-call/**', 'tools/mock-call/patch_ringrtc.py', 'tools/mock-call/verify_native.py', 'native/call-denoise/**', 'native/incoming-audio/**', 'tools/deepfilter/patch_ringrtc.py', 'tools/deepfilter/package_native.py', 'tools/incoming-audio/build_native.sh', 'tools/incoming-audio/patch_ringrtc.py', 'native/deepfilter-runtime/Cargo.lock') }}
       - uses: actions/cache/restore@v4
         id: source-cache
         if: steps.native-cache.outputs.cache-hit != 'true'

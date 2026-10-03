@@ -38,10 +38,15 @@ class Clip {
   }
   bool Read(int64_t start,uint32_t frames,std::span<int16_t> output)const noexcept {
     if(!rate_||!frames||frames>480||static_cast<size_t>(frames)*channels_>output.size()||start>INT64_MAX-static_cast<int64_t>(frames))return false;
-    for(uint32_t f=0;f<frames;++f)for(uint32_t c=0;c<channels_;++c){
-      const int64_t position=start+f;const size_t target=static_cast<size_t>(f)*channels_+c;
-      output[target]=position>=0&&static_cast<uint64_t>(position)<Frames()?pcm_[static_cast<size_t>(position)*channels_+c]:0;
-    }return true;
+    for (uint32_t f = 0; f < frames; ++f) {
+      for (uint32_t c = 0; c < channels_; ++c) {
+        const int64_t position = start + f;
+        const size_t target = static_cast<size_t>(f) * channels_ + c;
+        output[target] = position >= 0 && static_cast<uint64_t>(position) < Frames()
+            ? pcm_[static_cast<size_t>(position) * channels_ + c] : 0;
+      }
+    }
+    return true;
   }
   uint32_t Rate()const noexcept{return rate_;}uint32_t Channels()const noexcept{return channels_;}
   uint64_t Frames()const noexcept{return channels_?pcm_.size()/channels_:0;}
