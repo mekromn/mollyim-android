@@ -7,8 +7,8 @@ namespace molly_denoise {
 struct RuntimeFactory::Storage {
   std::mutex mutex;
   std::string library_path;
-  std::array<std::string,2> model_paths;
-  std::array<std::shared_ptr<const std::vector<uint8_t>>,2> models;
+  std::array<std::string,3> model_paths;
+  std::array<std::shared_ptr<const std::vector<uint8_t>>,3> models;
   void* library=nullptr;
   decltype(&molly_df_abi_version) version=nullptr;
   decltype(&molly_df_create) create=nullptr;
@@ -29,12 +29,12 @@ struct RuntimeFactory::Storage {
     library=candidate;return true;
   }
 };
-RuntimeFactory::RuntimeFactory(std::string path,std::array<std::string,2> models):storage_(std::make_shared<Storage>()){
+RuntimeFactory::RuntimeFactory(std::string path,std::array<std::string,3> models):storage_(std::make_shared<Storage>()){
   storage_->library_path=std::move(path);storage_->model_paths=std::move(models);
 }
 RuntimeFactory::~RuntimeFactory()=default;
 std::unique_ptr<StreamingEngine> RuntimeFactory::Create(Model model,uint32_t channel,const DfConfig& config){
-  if(static_cast<uint32_t>(model)>1||channel>1)return nullptr;
+  if(static_cast<uint32_t>(model)>2||channel>1)return nullptr;
   DenoiseConfig checked;checked.model=model;checked.parameters=config;if(!checked.Valid())return nullptr;
   std::shared_ptr<const std::vector<uint8_t>> bytes;
   {
@@ -59,7 +59,7 @@ std::unique_ptr<StreamingEngine> RuntimeFactory::Create(Model model,uint32_t cha
   };
   DfHandle* handle=nullptr;DfMeta meta{};
   if(storage_->create(bytes->data(),bytes->size(),&config,&handle,&meta)!=0){forget_failed_bytes();return nullptr;}
-  if(!handle||!DelayPlan::For(48000,1,meta)||meta.lookahead!=(model==Model::Standard?2u:0u)){
+  if(!handle||!DelayPlan::For(48000,1,meta)||meta.lookahead!=(model==Model::LowLatency?0u:2u)){
     if(handle)storage_->destroy(handle);
     forget_failed_bytes();return nullptr;
   }
