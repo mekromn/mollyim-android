@@ -52,6 +52,8 @@ import org.signal.core.ui.compose.theme.SignalTheme
 import org.thoughtcrime.securesms.R
 import org.thoughtcrime.securesms.webrtc.audio.IncomingAudioBridge
 import org.thoughtcrime.securesms.webrtc.audio.IncomingAudioController
+import org.thoughtcrime.securesms.webrtc.audio.CallAudioSession
+import org.thoughtcrime.securesms.webrtc.audio.ProductionCallAudioSession
 import org.thoughtcrime.securesms.webrtc.audio.IncomingAudioSettings
 import java.util.Locale
 import kotlin.math.round
@@ -103,26 +105,26 @@ private fun IncomingAudioSheet(settings: IncomingAudioSettings, onDismiss: () ->
 
 /** The existing received settings/controller are reused, not migrated or reset. */
 @Composable
-internal fun ReceivedAudioEffects(settings: IncomingAudioSettings) {
+internal fun ReceivedAudioEffects(settings: IncomingAudioSettings, session: CallAudioSession = ProductionCallAudioSession) {
   var eqExpanded by rememberSaveable { mutableStateOf(false) }
   var advanced by rememberSaveable { mutableStateOf(false) }
-  var meter by remember { mutableStateOf(AudioMeterState(available = IncomingAudioController.available)) }
-  LaunchedEffect(Unit) {
+  var meter by remember { mutableStateOf(AudioMeterState(available = session.effectsAvailable)) }
+  LaunchedEffect(session) {
     val values = FloatArray(6)
-    var previous = IncomingAudioBridge.readMeters(values)
+    var previous = session.readEffectsMeters(values)
     var changedAt = 0L
     while (isActive) {
       delay(100)
-      val count = IncomingAudioBridge.readMeters(values)
+      val count = session.readEffectsMeters(values)
       val now = SystemClock.elapsedRealtime()
       if (count >= 0 && count != previous) changedAt = now
       previous = count
-      meter = AudioMeterState(values[0], values[1], values[2], values[3], values[4].toInt(), values[5].toInt(), count >= 0 && changedAt != 0L && now - changedAt < 1500, IncomingAudioController.available)
+      meter = AudioMeterState(values[0], values[1], values[2], values[3], values[4].toInt(), values[5].toInt(), count >= 0 && changedAt != 0L && now - changedAt < 1500, session.effectsAvailable)
     }
   }
   val available = meter.available
   val edit = available && settings.enabled
-  fun update(value: IncomingAudioSettings, persist: Boolean = true) = IncomingAudioController.update(value, persist)
+  fun update(value: IncomingAudioSettings, persist: Boolean = true) { session.updateEffects(value); if (persist) session.save() }
   Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(14.dp)) {
     if (!available) {
       Surface(color = MaterialTheme.colorScheme.errorContainer, shape = RoundedCornerShape(16.dp)) {
@@ -147,7 +149,7 @@ internal fun ReceivedAudioEffects(settings: IncomingAudioSettings) {
       AssistChip(enabled = available, onClick = { update(IncomingAudioSettings(enabled = true, threshold = -18f, ratio = 2f, makeup = 2f)) }, label = { Text(stringResource(R.string.incoming_audio_preset_gentle)) })
     }
     AudioSection(stringResource(R.string.incoming_audio_gain), settings.gainEnabled, edit, { update(settings.copy(gainEnabled = it)) }) {
-      AudioSlider(stringResource(R.string.incoming_audio_gain), settings.gain, -24f..18f, "dB", edit && settings.gainEnabled) { update(settings.copy(gain = it), false) }
+      AudioSlider(stringResource(R.string.incoming_audio_gain), settings.gain, -24f..18f, "dB", edit && settings.gainEnabled, session::save) { update(settings.copy(gain = it), false) }
     }
     AudioSection(stringResource(R.string.incoming_audio_eq), settings.eqEnabled, edit, { update(settings.copy(eqEnabled = it)) }) {
       Row {
@@ -159,27 +161,27 @@ internal fun ReceivedAudioEffects(settings: IncomingAudioSettings) {
         frequencies.forEachIndexed { index, frequency ->
           val supported = !meter.active || frequency < meter.rate * 0.45f
           val label = if (frequency >= 1000) "${number(frequency / 1000)} kHz" else "${number(frequency)} Hz"
-          AudioSlider(label, settings.eq[index], -12f..12f, "dB", edit && settings.eqEnabled && supported) { value -> update(settings.copy(eq = settings.eq.mapIndexed { i, old -> if (i == index) value else old }), false) }
+          AudioSlider(label, settings.eq[index], -12f..12f, "dB", edit && settings.eqEnabled && supported, session::save) { value -> update(settings.copy(eq = settings.eq.mapIndexed { i, old -> if (i == index) value else old }), false) }
           if (!supported) Text(stringResource(R.string.incoming_audio_high_band), style = MaterialTheme.typography.labelSmall)
         }
       }
     }
     AudioSection(stringResource(R.string.incoming_audio_compressor), settings.compressorEnabled, edit, { update(settings.copy(compressorEnabled = it)) }) {
       val enabled = edit && settings.compressorEnabled
-      AudioSlider(stringResource(R.string.incoming_audio_threshold), settings.threshold, -60f..0f, "dBFS", enabled) { update(settings.copy(threshold = it), false) }
-      AudioSlider(stringResource(R.string.incoming_audio_ratio), settings.ratio, 1f..20f, ":1", enabled) { update(settings.copy(ratio = it), false) }
+      AudioSlider(stringResource(R.string.incoming_audio_threshold), settings.threshold, -60f..0f, "dBFS", enabled, session::save) { update(settings.copy(threshold = it), false) }
+      AudioSlider(stringResource(R.string.incoming_audio_ratio), settings.ratio, 1f..20f, ":1", enabled, session::save) { update(settings.copy(ratio = it), false) }
       TextButton(onClick = { advanced = !advanced }) { Text(stringResource(if (advanced) R.string.incoming_audio_simple else R.string.incoming_audio_advanced)) }
       if (advanced) {
-        AudioSlider(stringResource(R.string.incoming_audio_attack), settings.attack, 0.1f..100f, "ms", enabled) { update(settings.copy(attack = it), false) }
-        AudioSlider(stringResource(R.string.incoming_audio_release), settings.release, 10f..1000f, "ms", enabled) { update(settings.copy(release = it), false) }
-        AudioSlider(stringResource(R.string.incoming_audio_knee), settings.knee, 0f..24f, "dB", enabled) { update(settings.copy(knee = it), false) }
-        AudioSlider(stringResource(R.string.incoming_audio_makeup), settings.makeup, 0f..18f, "dB", enabled) { update(settings.copy(makeup = it), false) }
+        AudioSlider(stringResource(R.string.incoming_audio_attack), settings.attack, 0.1f..100f, "ms", enabled, session::save) { update(settings.copy(attack = it), false) }
+        AudioSlider(stringResource(R.string.incoming_audio_release), settings.release, 10f..1000f, "ms", enabled, session::save) { update(settings.copy(release = it), false) }
+        AudioSlider(stringResource(R.string.incoming_audio_knee), settings.knee, 0f..24f, "dB", enabled, session::save) { update(settings.copy(knee = it), false) }
+        AudioSlider(stringResource(R.string.incoming_audio_makeup), settings.makeup, 0f..18f, "dB", enabled, session::save) { update(settings.copy(makeup = it), false) }
       }
     }
     AudioSection(stringResource(R.string.incoming_audio_limiter), settings.limiterEnabled, edit, { update(settings.copy(limiterEnabled = it)) }) {
       val enabled = edit && settings.limiterEnabled
-      AudioSlider(stringResource(R.string.incoming_audio_ceiling), settings.ceiling, -24f..-0.1f, "dBFS", enabled) { update(settings.copy(ceiling = it), false) }
-      AudioSlider(stringResource(R.string.incoming_audio_release), settings.limiterRelease, 10f..1000f, "ms", enabled) { update(settings.copy(limiterRelease = it), false) }
+      AudioSlider(stringResource(R.string.incoming_audio_ceiling), settings.ceiling, -24f..-0.1f, "dBFS", enabled, session::save) { update(settings.copy(ceiling = it), false) }
+      AudioSlider(stringResource(R.string.incoming_audio_release), settings.limiterRelease, 10f..1000f, "ms", enabled, session::save) { update(settings.copy(limiterRelease = it), false) }
     }
     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
       OutlinedButton(enabled = available && settings.enabled, onClick = { update(settings.copy(enabled = false)) }) { Text(stringResource(R.string.incoming_audio_bypass)) }
@@ -209,13 +211,13 @@ private fun AudioSection(title: String, checked: Boolean, enabled: Boolean, onCh
 }
 
 @Composable
-private fun AudioSlider(label: String, value: Float, range: ClosedFloatingPointRange<Float>, unit: String, enabled: Boolean, onValue: (Float) -> Unit) {
+private fun AudioSlider(label: String, value: Float, range: ClosedFloatingPointRange<Float>, unit: String, enabled: Boolean, onFinished: () -> Unit, onValue: (Float) -> Unit) {
   Column {
     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
       Text(label, style = MaterialTheme.typography.bodyMedium)
       Text("${number(value)} $unit", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
     }
-    Slider(value = value.coerceIn(range), valueRange = range, enabled = enabled, onValueChange = { onValue((round(it * 10) / 10).coerceIn(range)) }, onValueChangeFinished = IncomingAudioController::save)
+    Slider(value = value.coerceIn(range), valueRange = range, enabled = enabled, onValueChange = { onValue((round(it * 10) / 10).coerceIn(range)) }, onValueChangeFinished = onFinished)
   }
 }
 

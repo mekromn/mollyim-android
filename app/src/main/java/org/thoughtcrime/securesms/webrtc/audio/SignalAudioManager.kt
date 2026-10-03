@@ -48,6 +48,14 @@ sealed class SignalAudioManager(protected val context: Context, protected val ev
 
   private val stateChangeUpSoundId = soundPool.load(context, R.raw.notification_simple_01, 1)
 
+  @Volatile protected var localTestMode = false
+
+  /** Configured before commands are posted; no production call uses this mode. */
+  fun configureForLocalTest() { localTestMode = true }
+
+  protected fun mayRestoreAudioMode(): Boolean = !localTestMode ||
+    androidAudioManager.mode == AudioManager.MODE_IN_COMMUNICATION || androidAudioManager.mode == savedAudioMode
+
   protected var savedAudioMode = AudioManager.MODE_INVALID
   protected var savedIsMicrophoneMute = false
 
@@ -81,14 +89,22 @@ sealed class SignalAudioManager(protected val context: Context, protected val ev
     }
   }
 
-  fun shutdown() {
+  fun shutdown() = shutdown(null)
+
+  /** Completion is route/focus retirement, not native model disposal. */
+  fun shutdown(onStopped: Runnable?) {
     handler.post {
-      stop(false)
+      // Discard delayed focus retries and route commands before allowing a
+      // replacement owner to change the global communication audio state.
+      handler.removeCallbacksAndMessages(null)
+      if (!localTestMode || state != State.UNINITIALIZED) stop(false)
+      if (localTestMode) soundPool.release()
       if (commandAndControlThread != null) {
         Log.i(TAG, "Shutting down command and control")
         commandAndControlThread.quitSafely()
         commandAndControlThread = null
       }
+      onStopped?.run()
     }
   }
 
@@ -123,6 +139,7 @@ sealed class SignalAudioManager(protected val context: Context, protected val ev
   }
 
   protected fun setMicrophoneMute(on: Boolean) {
+    if (localTestMode) return // Lab gates never change the global microphone privacy state.
     if (androidAudioManager.isMicrophoneMute != on) {
       androidAudioManager.isMicrophoneMute = on
     }
@@ -252,7 +269,7 @@ class FullSignalAudioManager(context: Context, eventListener: EventListener?) : 
     androidAudioManager.mode = AudioManager.MODE_IN_COMMUNICATION
 
     val volume: Float = androidAudioManager.ringVolumeWithMinimum()
-    soundPool.play(connectedSoundId, volume, volume, 0, 0, 1.0f)
+    if (!localTestMode) soundPool.play(connectedSoundId, volume, volume, 0, 0, 1.0f)
 
     Log.d(TAG, "Started")
   }
@@ -263,7 +280,7 @@ class FullSignalAudioManager(context: Context, eventListener: EventListener?) : 
     incomingRinger.stop()
     outgoingRinger.stop()
 
-    if (playDisconnect && state != State.UNINITIALIZED) {
+    if (!localTestMode && playDisconnect && state != State.UNINITIALIZED) {
       val volume: Float = androidAudioManager.ringVolumeWithMinimum()
       soundPool.play(disconnectedSoundId, volume, volume, 0, 0, 1.0f)
     }
@@ -275,9 +292,11 @@ class FullSignalAudioManager(context: Context, eventListener: EventListener?) : 
 
     signalBluetoothManager.stop()
 
-    setSpeakerphoneOn(savedIsSpeakerPhoneOn)
-    setMicrophoneMute(savedIsMicrophoneMute)
-    androidAudioManager.mode = savedAudioMode
+    if (mayRestoreAudioMode()) {
+      setSpeakerphoneOn(savedIsSpeakerPhoneOn)
+      setMicrophoneMute(savedIsMicrophoneMute)
+      androidAudioManager.mode = savedAudioMode
+    }
 
     androidAudioManager.abandonCallAudioFocus()
     Log.d(TAG, "Abandoned audio focus for VOICE_CALL streams")

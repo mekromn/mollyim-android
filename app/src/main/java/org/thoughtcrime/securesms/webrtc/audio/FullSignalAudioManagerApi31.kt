@@ -148,7 +148,7 @@ class FullSignalAudioManagerApi31(context: Context, eventListener: EventListener
     Log.i(TAG, "start: setting mode to MODE_IN_COMMUNICATION")
     androidAudioManager.mode = AudioManager.MODE_IN_COMMUNICATION
     val volume: Float = androidAudioManager.ringVolumeWithMinimum()
-    soundPool.play(connectedSoundId, volume, volume, 0, 0, 1.0f)
+    if (!localTestMode) soundPool.play(connectedSoundId, volume, volume, 0, 0, 1.0f)
 
     Log.d(TAG, "Started")
   }
@@ -159,7 +159,7 @@ class FullSignalAudioManagerApi31(context: Context, eventListener: EventListener
     incomingRinger.stop()
     outgoingRinger.stop()
 
-    if (playDisconnect && state != State.UNINITIALIZED) {
+    if (!localTestMode && playDisconnect && state != State.UNINITIALIZED) {
       val volume: Float = androidAudioManager.ringVolumeWithMinimum()
       soundPool.play(disconnectedSoundId, volume, volume, 0, 0, 1.0f)
     }
@@ -178,7 +178,7 @@ class FullSignalAudioManagerApi31(context: Context, eventListener: EventListener
           "This indicates a service spun up solely to set audio device. " +
           "Therefore skipping audio device reset."
       )
-    } else {
+    } else if (mayRestoreAudioMode()) {
       Log.i(TAG, "stop: restoring mode to ${getModeName(savedAudioMode)}")
       androidAudioManager.clearCommunicationDevice()
       setSpeakerphoneOn(savedIsSpeakerPhoneOn)

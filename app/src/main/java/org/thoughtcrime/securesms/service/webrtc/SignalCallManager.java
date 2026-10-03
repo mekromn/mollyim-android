@@ -75,6 +75,7 @@ import org.thoughtcrime.securesms.util.TextSecurePreferences;
 import org.thoughtcrime.securesms.util.rx.RxStore;
 import org.thoughtcrime.securesms.webrtc.CallNotificationBuilder;
 import org.thoughtcrime.securesms.webrtc.audio.SignalAudioManager;
+import org.thoughtcrime.securesms.webrtc.audio.mock.MockCallLabRuntime;
 import org.thoughtcrime.securesms.webrtc.locks.LockManager;
 import org.webrtc.PeerConnection;
 import org.whispersystems.signalservice.api.NetworkResultUtil;
@@ -190,7 +191,11 @@ public final class SignalCallManager implements CallManager.Observer, GroupCall.
     return linkPeekInfoStore.getState();
   }
 
-  private void process(@NonNull ProcessAction action) {
+  private void process(@NonNull ProcessAction action) { process(action, false); }
+
+  private void processCallStart(@NonNull ProcessAction action) { process(action, true); }
+
+  private void process(@NonNull ProcessAction action, boolean mayAcquireAudio) {
     Throwable t      = new Throwable();
     String    caller = t.getStackTrace().length > 1 ? t.getStackTrace()[1].getMethodName() : "unknown";
 
@@ -199,6 +204,7 @@ public final class SignalCallManager implements CallManager.Observer, GroupCall.
       return;
     }
 
+    if (mayAcquireAudio) MockCallLabRuntime.reserveRealCall();
     serviceExecutor.execute(() -> {
       if (needsToSetSelfUuid) {
         try {
@@ -211,7 +217,19 @@ public final class SignalCallManager implements CallManager.Observer, GroupCall.
 
       Log.v(TAG, "Processing action: " + caller + ", handler: " + serviceState.getActionProcessor().getTag());
       WebRtcServiceState previous = serviceState;
-      serviceState = action.process(previous, previous.getActionProcessor());
+      try {
+        if (mayAcquireAudio && !MockCallLabRuntime.awaitHardwareStop()) {
+          serviceState = previous.getActionProcessor().callFailure(previous, "Local audio did not release the call route", null);
+        } else {
+          serviceState = action.process(previous, previous.getActionProcessor());
+        }
+      } finally {
+        boolean ownsAudio = serviceState.getCallInfoState().getCallState() != WebRtcViewModel.State.IDLE ||
+                            serviceState.getCallInfoState().getGroupCallState() != IDLE ||
+                            serviceState.getCallInfoState().getGroupCall() != null ||
+                            !serviceState.getCallInfoState().getPeerMap().isEmpty();
+        MockCallLabRuntime.realStateChanged(ownsAudio, mayAcquireAudio);
+      }
 
       if (previous != serviceState) {
         if (serviceState.getCallInfoState().getCallState() != WebRtcViewModel.State.IDLE) {
@@ -234,15 +252,15 @@ public final class SignalCallManager implements CallManager.Observer, GroupCall.
   }
 
   public void startPreJoinCall(@NonNull Recipient recipient) {
-    process((s, p) -> p.handlePreJoinCall(s, new RemotePeer(recipient.getId())));
+    processCallStart((s, p) -> p.handlePreJoinCall(s, new RemotePeer(recipient.getId())));
   }
 
   public void startOutgoingAudioCall(@NonNull Recipient recipient) {
-    process((s, p) -> p.handleOutgoingCall(s, new RemotePeer(recipient.getId()), OfferMessage.Type.AUDIO_CALL));
+    processCallStart((s, p) -> p.handleOutgoingCall(s, new RemotePeer(recipient.getId()), OfferMessage.Type.AUDIO_CALL));
   }
 
   public void startOutgoingVideoCall(@NonNull Recipient recipient) {
-    process((s, p) -> p.handleOutgoingCall(s, new RemotePeer(recipient.getId()), OfferMessage.Type.VIDEO_CALL));
+    processCallStart((s, p) -> p.handleOutgoingCall(s, new RemotePeer(recipient.getId()), OfferMessage.Type.VIDEO_CALL));
   }
 
   public void cancelPreJoin() {
@@ -337,7 +355,7 @@ public final class SignalCallManager implements CallManager.Observer, GroupCall.
                             @NonNull WebRtcData.OfferMetadata offerMetadata,
                             @NonNull WebRtcData.ReceivedOfferMetadata receivedOfferMetadata)
   {
-    process((s, p) -> p.handleReceivedOffer(s, callMetadata, offerMetadata, receivedOfferMetadata));
+    processCallStart((s, p) -> p.handleReceivedOffer(s, callMetadata, offerMetadata, receivedOfferMetadata));
   }
 
   public void receivedAnswer(@NonNull WebRtcData.CallMetadata callMetadata,
@@ -588,7 +606,7 @@ public final class SignalCallManager implements CallManager.Observer, GroupCall.
       return;
     }
 
-    process((s, p) -> {
+    processCallStart((s, p) -> {
       RemotePeer remotePeer = (RemotePeer) remote;
       if (s.getCallInfoState().getPeer(remotePeer.hashCode()) == null) {
         Log.w(TAG, "remotePeer not found in map with key: " + remotePeer.hashCode() + "! Dropping.");
@@ -1009,7 +1027,7 @@ public final class SignalCallManager implements CallManager.Observer, GroupCall.
           group.memberLevel(senderRecipient).isInGroup() &&
           (!group.isAnnouncementGroup() || group.isAdmin(senderRecipient)))
       {
-        process((s, p) -> p.handleGroupCallRingUpdate(s, new RemotePeer(group.getRecipientId()), groupId, ringId, senderAci, ringUpdate));
+        processCallStart((s, p) -> p.handleGroupCallRingUpdate(s, new RemotePeer(group.getRecipientId()), groupId, ringId, senderAci, ringUpdate));
       } else {
         Log.w(TAG, "Unable to ring unknown/inactive/blocked group, or sender is not a current member of the group.");
       }
@@ -1032,7 +1050,7 @@ public final class SignalCallManager implements CallManager.Observer, GroupCall.
   @Override
   public void onLocalDeviceStateChanged(@NonNull GroupCall groupCall) {
     Log.i(TAG, "onLocalDeviceStateChanged: localAdapterType: " + groupCall.getLocalDeviceState().getNetworkRoute().getLocalAdapterType());
-    process((s, p) -> p.handleGroupLocalDeviceStateChanged(s));
+    processCallStart((s, p) -> p.handleGroupLocalDeviceStateChanged(s));
   }
 
   @Override

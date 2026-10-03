@@ -44,23 +44,26 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
 import org.thoughtcrime.securesms.R
-import org.thoughtcrime.securesms.webrtc.audio.CallDenoiseController
+import org.thoughtcrime.securesms.webrtc.audio.CallAudioSession
+import org.thoughtcrime.securesms.webrtc.audio.ProductionCallAudioSession
 import org.thoughtcrime.securesms.webrtc.audio.DenoiseStatus
 import org.thoughtcrime.securesms.webrtc.audio.Direction
-import org.thoughtcrime.securesms.webrtc.audio.IncomingAudioController
 
 @Composable
-fun CallAudioControls(onSheetDisplayChanged: (Boolean) -> Unit) {
+fun CallAudioControls(
+  onSheetDisplayChanged: (Boolean) -> Unit,
+  session: CallAudioSession = ProductionCallAudioSession,
+  statsHeader: @Composable () -> Unit = {}
+) {
   val context = LocalContext.current
   var visible by rememberSaveable { mutableStateOf(false) }
   val sheetChanged by rememberUpdatedState(onSheetDisplayChanged)
-  LaunchedEffect(context) { IncomingAudioController.initialize(context) }
-  DisposableEffect(visible) {
+  LaunchedEffect(context, session) { session.initialize(context) }
+  DisposableEffect(visible, session) {
     if (visible) sheetChanged(true)
     onDispose {
       if (visible) {
-        IncomingAudioController.save()
-        CallDenoiseController.save()
+        session.save()
         sheetChanged(false)
       }
     }
@@ -70,26 +73,27 @@ fun CallAudioControls(onSheetDisplayChanged: (Boolean) -> Unit) {
     Spacer(Modifier.width(8.dp))
     Text(stringResource(R.string.call_audio_title))
   }
-  if (visible) CallAudioSheet { visible = false }
+  if (visible) CallAudioSheet(session, statsHeader) { visible = false }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun CallAudioSheet(onDismiss: () -> Unit) {
-  val ui by CallDenoiseController.state.collectAsState()
-  val incoming by IncomingAudioController.settings.collectAsState()
+private fun CallAudioSheet(session: CallAudioSession, statsHeader: @Composable () -> Unit, onDismiss: () -> Unit) {
+  val state by session.state.collectAsState()
+  val ui = state.denoise
+  val incoming = state.effects
   var selected by rememberSaveable { mutableStateOf(0) }
   var receivedStatus by remember { mutableStateOf(DenoiseStatus()) }
   var sentStatus by remember { mutableStateOf(DenoiseStatus()) }
   val receivedScroll = rememberScrollState()
   val sentScroll = rememberScrollState()
-  LaunchedEffect(Unit) {
+  LaunchedEffect(session) {
     while (isActive) {
       val pair = withContext(Dispatchers.Default) {
-        CallDenoiseController.readStatus(Direction.RECEIVED) to CallDenoiseController.readStatus(Direction.SENT)
+        session.readStatus()
       }
-      receivedStatus = pair.first
-      sentStatus = pair.second
+      receivedStatus = pair.received
+      sentStatus = pair.sent
       delay(100)
     }
   }
@@ -103,6 +107,7 @@ private fun CallAudioSheet(onDismiss: () -> Unit) {
         Text(stringResource(R.string.denoise_received_summary, denoiseStatusLabel(ui.settings.received, ui, receivedStatus)), style = MaterialTheme.typography.labelMedium)
         Text(stringResource(R.string.denoise_sent_summary, denoiseStatusLabel(ui.settings.sent, ui, sentStatus)), style = MaterialTheme.typography.labelMedium)
       }
+      statsHeader()
       TabRow(selectedTabIndex = selected, containerColor = MaterialTheme.colorScheme.surface) {
         Tab(selected = selected == 0, onClick = { selected = 0 }, text = { Text(stringResource(R.string.denoise_received)) })
         Tab(selected = selected == 1, onClick = { selected = 1 }, text = { Text(stringResource(R.string.denoise_sent)) })
@@ -114,12 +119,12 @@ private fun CallAudioSheet(onDismiss: () -> Unit) {
       ) {
         if (!ui.storageAvailable) Text(stringResource(R.string.denoise_storage_unavailable), color = MaterialTheme.colorScheme.error)
         DeepFilterSection(direction, ui.settings[direction], ui, if (selected == 0) receivedStatus else sentStatus,
-          onUpdate = { settings, persist -> CallDenoiseController.update(direction, settings, persist) },
-          onSave = { CallDenoiseController.save() },
-          onBypass = { CallDenoiseController.setBypassed(direction, it) },
-          onRetry = { CallDenoiseController.retry(direction) },
-          onReset = { CallDenoiseController.reset(direction) })
-        if (direction == Direction.RECEIVED) ReceivedAudioEffects(incoming)
+          onUpdate = { settings, persist -> session.updateDenoise(direction, settings); if (persist) session.save() },
+          onSave = { session.save() },
+          onBypass = { session.setBypassed(direction, it) },
+          onRetry = { session.retry(direction) },
+          onReset = { session.reset(direction) })
+        if (direction == Direction.RECEIVED) ReceivedAudioEffects(incoming, session)
         Text(stringResource(R.string.denoise_local_note), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Spacer(Modifier.height(24.dp))
       }

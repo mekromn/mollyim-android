@@ -5,6 +5,8 @@
 
 package org.thoughtcrime.securesms.components.settings.app.help
 
+import android.content.Intent
+import org.thoughtcrime.securesms.webrtc.audio.mock.MockCallLabActivity
 import android.widget.Toast
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -131,6 +133,22 @@ class HelpSettingsFragment : ComposeFragment() {
             text = stringResource(id = R.string.HelpSettingsFragment__debug_log),
             onClick = {
               navController.safeNavigate(R.id.action_helpSettingsFragment_to_submitDebugLogActivity)
+            }
+          )
+        }
+
+        item {
+          Rows.TextRow(
+            text = "Debug",
+            label = "Mock Call Lab — local audio testing",
+            onClick = {
+              MaterialAlertDialogBuilder(context)
+                .setTitle("Debug")
+                .setItems(arrayOf("Mock Call Lab")) { _, _ ->
+                  context.startActivity(Intent(context, MockCallLabActivity::class.java))
+                }
+                .setNegativeButton(android.R.string.cancel, null)
+                .show()
             }
           )
         }
