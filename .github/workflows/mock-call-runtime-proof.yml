@@ -1,0 +1,80 @@
+name: Mock Call Lab packaged ARM64 runtime proof
+on:
+  push:
+    branches: [feature/mock-call-lab]
+    paths: ['.github/workflows/mock-call-runtime-proof.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  packaged-runtime:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 65
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ef56e0b7967c8cb7515717b3bc43760b88808813
+      - uses: actions/download-artifact@v4
+        with:
+          name: deepfilter-android-reference-inputs
+          run-id: 36929152476
+          github-token: ${{ github.token }}
+          path: out/reference
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+          cmdline-tools-version: 13114758
+          log-accepted-android-sdk-licenses: false
+      - name: Prepare Android ARM64 execution environment
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y qemu-user e2fsprogs
+          sdkmanager 'ndk;28.0.13004108'
+          mkdir -p out/mock-runtime-proof
+      - name: Require the exact successful compiled APK
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'PY'
+          import json, subprocess, time
+          from pathlib import Path
+          base='repos/mekromn/mollyim-android/actions/runs/37099403894'
+          for attempt in range(100):
+              run=json.loads(subprocess.check_output(['gh','api',base]))
+              assert run['head_sha']=='ef56e0b7967c8cb7515717b3bc43760b88808813'
+              if run['status']=='completed':
+                  if run['conclusion']!='success':
+                      raise RuntimeError('The required application build did not succeed: '+str(run['conclusion']))
+                  records=json.loads(subprocess.check_output(['gh','api',base+'/artifacts']))['artifacts']
+                  matches=[a for a in records if a['name']=='molly-mock-call-lab-unsigned']
+                  assert len(matches)==1 and not matches[0]['expired']
+                  Path('out/mock-runtime-proof/input-artifact.json').write_text(json.dumps(matches[0],indent=2))
+                  break
+              time.sleep(30)
+          else:
+              raise RuntimeError('Bounded wait expired; no APK result claimed')
+          PY
+      - uses: actions/download-artifact@v4
+        with:
+          name: molly-mock-call-lab-unsigned
+          run-id: 37099403894
+          github-token: ${{ github.token }}
+          path: out/mock-apk
+      - name: Execute the APK's two actual DeepFilterNet models with Android Bionic
+        run: |
+          set -o pipefail
+          mapfile -t apks < <(find out/mock-apk -type f -name '*.apk')
+          test "${#apks[@]}" = 1
+          sha256sum "${apks[0]}" > out/mock-runtime-proof/input-apk.sha256
+          bash tools/deepfilter/qemu_runtime.sh "${apks[0]}" out/reference 2>&1 | tee out/mock-runtime-proof/execution.log
+          printf '%s\n' 'Android ARM64 ELF inference with Bionic under QEMU user mode. NOT Android UI, physical microphone routing, or a live-call test.' > out/mock-runtime-proof/test-boundaries.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mock-call-packaged-runtime-proof
+          path: |
+            out/mock-runtime-proof/
+            out/arm64-execution/*.json
+            out/arm64-execution/*.log
+          if-no-files-found: error
