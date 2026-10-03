@@ -1,0 +1,203 @@
+name: Mock Call Lab app and signed-update candidate
+on:
+  push:
+    branches: [feature/mock-call-lab]
+    paths:
+      - '.github/workflows/mock-call-app.yml'
+      - 'tools/mock-call/staged-app.*'
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: mock-call-app-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  publish-source:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    outputs:
+      source: ${{ steps.publish.outputs.source }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 100
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Reconstruct only hash-verified app source
+        run: |
+          test "$GITHUB_REF" = refs/heads/feature/mock-call-lab
+          mkdir -p out/mock-app-source
+          python3 - <<'PY'
+          import base64,hashlib,json,lzma,subprocess
+          from pathlib import Path
+          m=json.loads(Path('tools/mock-call/staged-app.json').read_text())
+          subprocess.run(['git','merge-base','--is-ancestor',m['base'],'HEAD'],check=True)
+          parts=[]
+          for n,expected in enumerate(m['part_sha256']):
+              b=Path(f'tools/mock-call/staged-app.part{n}.b64').read_bytes()
+              assert hashlib.sha256(b).hexdigest()==expected
+              parts.append(b.strip())
+          encoded=b''.join(parts);assert len(encoded)==m['encoded_size']
+          decoder=lzma.LZMADecompressor(memlimit=134217728)
+          patch=decoder.decompress(base64.b64decode(encoded,validate=True),max_length=512000)
+          assert decoder.eof and not decoder.unused_data and len(patch)==m['patch_size']
+          assert hashlib.sha256(patch).hexdigest()==m['patch_sha256']
+          for name in m['files']:
+              p=Path(name);assert not p.is_absolute() and '..' not in p.parts
+              assert name.startswith(('app/src/main/','tools/mock-call/'))
+          if not all(Path(p).is_file() and hashlib.sha256(Path(p).read_bytes()).hexdigest()==h for p,h in m['files'].items()):
+              subprocess.run(['git','apply','--check','-'],input=patch,check=True)
+              subprocess.run(['git','apply','-'],input=patch,check=True)
+          for p,h in m['files'].items():assert hashlib.sha256(Path(p).read_bytes()).hexdigest()==h,p
+          print('Verified',len(m['files']),'exact tested source files.')
+          PY
+      - name: Run recording, route, privacy, controller and UI source contracts
+        run: |
+          set -o pipefail
+          bash tools/mock-call/test_app.sh 2>&1 | tee out/mock-app-source/tests.log
+          python3 tools/mock-call/test_apk_verifier.py 2>&1 | tee out/mock-app-source/apk-contracts.log
+          git diff --check
+      - name: Publish tested app files and increasing update version
+        id: publish
+        run: |
+          python3 - <<'PY'
+          import hashlib,json,subprocess
+          from pathlib import Path
+          m=json.loads(Path('tools/mock-call/staged-app.json').read_text())
+          for p,h in m['files'].items():assert hashlib.sha256(Path(p).read_bytes()).hexdigest()==h,p
+          p=Path('app/build.gradle.kts');s=p.read_text()
+          old='val currentHotfixVersion = 2';new='val currentHotfixVersion = 3'
+          if new not in s:
+              assert s.count(old)==1;s=s.replace(old,new,1);p.write_text(s)
+          assert 'val canonicalVersionCode = 1719' in s and 'val mollyRevision = 4' in s and 'val maxHotfixVersions = 100' in s
+          subprocess.run(['git','add','--',*m['files'],'app/build.gradle.kts'],check=True)
+          PY
+          git config user.name 'Molly Audio build'
+          git config user.email 'builder@localhost'
+          if ! git diff --cached --quiet; then
+            git fetch origin feature/mock-call-lab
+            test "$(git rev-parse origin/feature/mock-call-lab)" = "$GITHUB_SHA"
+            git commit -m 'feat(mock): add local call screen, physical capture controls and lossless recordings' -m 'Source hashes and host contracts verified before publication. Actual Android compilation, APK verification and physical-device validation remain separate gates. Preserve account, original key and ordinary call settings.'
+            git push origin HEAD:feature/mock-call-lab
+          fi
+          echo "source=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          git rev-parse HEAD > out/mock-app-source/source-revision.txt
+          git archive --format=tar.gz HEAD > out/mock-app-source/source.tar.gz
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mock-call-app-source-reports
+          path: out/mock-app-source/
+          if-no-files-found: error
+  apk:
+    needs: publish-source
+    runs-on: ubuntu-24.04
+    timeout-minutes: 100
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.publish-source.outputs.source }}
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/download-artifact@v4
+        with:
+          name: molly-mock-native-arm64
+          run-id: 37086942637
+          github-token: ${{ github.token }}
+          path: out/native
+      - uses: actions/download-artifact@v4
+        with:
+          name: deepfilter-android-reference-inputs
+          run-id: 36929152476
+          github-token: ${{ github.token }}
+          path: out/reference
+      - name: Verify actual native inputs and both bundled models
+        run: |
+          mkdir -p out/mock-app-reports
+          python3 tools/mock-call/verify_native.py out/native/ringrtc-mock-arm64.aar > out/mock-app-reports/native.json
+          python3 - <<'PY'
+          import json,sys
+          from pathlib import Path
+          sys.path.insert(0,'tools/deepfilter')
+          from verify_release import verify_inputs
+          from prepare_models import publish_asset
+          verify_inputs(Path('.'),json.loads(Path('out/native/native-inputs.json').read_text()))
+          lock=Path('tools/deepfilter/models.lock.json')
+          for m in json.loads(lock.read_text())['models']:
+              publish_asset((Path('out/reference/models')/m['asset']).read_bytes(),m,Path('app/src/main/assets/deepfilter')/m['asset'])
+          (Path('app/src/main/assets/deepfilter')/'models.json').write_bytes(lock.read_bytes())
+          PY
+      - name: Preserve locked dependency attribution
+        run: |
+          rustup toolchain install 1.88.0 --profile minimal
+          cargo +1.88.0 metadata --locked --manifest-path native/deepfilter-runtime/Cargo.toml --format-version 1 > out/runtime-metadata.json
+          python3 tools/deepfilter/prepare_licenses.py out/runtime-metadata.json app/src/main/assets/deepfilter
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+          cmdline-tools-version: 13114758
+          log-accepted-android-sdk-licenses: false
+      - name: Prepare build SDK
+        run: |
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/.ghcup /usr/local/swift
+          sdkmanager 'build-tools;36.0.0' 'platforms;android-36.1' 'ndk;28.0.13004108'
+      - uses: gradle/actions/setup-gradle@v6
+      - name: Compile, lint and assemble actual optimized Android app
+        env:
+          INCOMING_AUDIO_AAR: ${{ github.workspace }}/out/native/ringrtc-mock-arm64.aar
+        run: |
+          chmod +x gradlew
+          set -o pipefail
+          common=(--no-daemon --no-parallel --max-workers=1
+            '-Dorg.gradle.jvmargs=-Xmx12g -XX:+UseParallelGC -XX:MaxMetaspaceSize=1g'
+            -Pkotlin.compiler.execution.strategy=in-process
+            -I tools/incoming-audio/native_override.gradle
+            -PbasePackageId=com.mekromn.mollyaudio
+            '-PbaseAppTitle=Molly Audio' -PbaseAppFileName=Molly-Audio)
+          ./gradlew "${common[@]}" :app:lintVitalProdStoreRelease 2>&1 | tee out/mock-app-reports/lint.log
+          ./gradlew "${common[@]}" :app:assembleProdStoreRelease 2>&1 | tee out/mock-app-reports/assembly.log
+      - name: Verify compiled APK and local-only entry
+        run: |
+          mapfile -t apks < <(find app/build/outputs/apk/prodStore/release -maxdepth 1 -name '*.apk')
+          test "${#apks[@]}" = 1
+          SDK="$ANDROID_HOME/build-tools/36.0.0"
+          mkdir -p out/mock-apk out/mock-sdk/lib64
+          cp "$SDK/aapt2" "$SDK/dexdump" "$SDK/zipalign" out/mock-sdk/
+          cp "$SDK/lib/apksigner.jar" out/mock-sdk/
+          cp "$SDK/lib64/libc++.so" out/mock-sdk/lib64/
+          python3 tools/deepfilter/finalize_models.py --input "${apks[0]}" --output out/model-complete.apk --models out/reference/models > out/mock-app-reports/models.json
+          "$SDK/zipalign" -P 16 -f 4 out/model-complete.apk out/mock-apk/Molly-Audio-Mock-Call-Lab-arm64-unsigned.apk
+          "$SDK/zipalign" -c -P 16 4 out/mock-apk/Molly-Audio-Mock-Call-Lab-arm64-unsigned.apk
+          python3 tools/mock-call/verify_apk.py --apk out/mock-apk/Molly-Audio-Mock-Call-Lab-arm64-unsigned.apk --aar out/native/ringrtc-mock-arm64.aar --sdk "$SDK" > out/mock-app-reports/apk-verification.json
+          git rev-parse HEAD > out/mock-app-reports/source-revision.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: molly-mock-call-lab-unsigned
+          path: out/mock-apk/
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        with:
+          name: molly-mock-sdk-tools
+          path: out/mock-sdk/
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mock-call-app-build-reports
+          path: out/mock-app-reports/
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: mock-call-incomplete-packaging-diagnostics
+          path: |
+            out/mock-apk/
+            out/mock-sdk/
+          if-no-files-found: ignore
