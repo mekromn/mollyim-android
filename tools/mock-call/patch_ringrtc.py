@@ -8,6 +8,16 @@ def load(name,path):
 base=load('deepfilter_patch',ROOT/'tools/deepfilter/patch_ringrtc.py')
 once=base.once
 
+def patch_group_factories(text: str) -> str:
+ before = '      this.groupFactory = this.createPeerConnectionFactory(null, audioConfig);'
+ after = '      try {\n        this.groupFactory = createPeerConnectionFactory(null, audioConfig);\n      } catch (CallException error) {\n        Log.w(TAG, "Unable to acquire the call audio resources", error);\n        return null;\n      }'
+ if text.count(after) == 2 and before not in text:
+  return text
+ if text.count(before) != 2:
+  raise RuntimeError('Expected both nullable group-factory creation paths')
+ return text.replace(before, after)
+
+
 def patch(ring:Path,root:Path=ROOT):
  web=ring/'src/webrtc/src';source=web/'audio/audio_transport_impl.cc';header=web/'audio/audio_transport_impl.h'
  if 'MOLLY_MOCK_CALL_EXPORTS' not in source.read_text():base.patch(ring,root)
@@ -132,7 +142,10 @@ void AudioTransportImpl::MollyMockStop() {
     } finally {
       adm.release();
     }''')
- # Direct/group public entry points already propagate checked CallException.
+ # Group factory creation has a nullable-error API; preserve it rather than
+ # adding a checked exception to public methods whose callers do not expect one.
+ manager.write_text(patch_group_factories(manager.read_text()))
+ # Direct CallContext construction already propagates checked CallException.
  once(manager,'                                boolean                        hideIp) {','                                boolean                        hideIp) throws CallException {')
  gate=java/'CallDenoiseGate.java'
  once(gate,'  static synchronized PeerConnectionFactory createFactory(Supplier<PeerConnectionFactory> builder) {','''  static synchronized PeerConnectionFactory createFactory(Supplier<PeerConnectionFactory> builder) throws CallException {
