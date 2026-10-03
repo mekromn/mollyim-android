@@ -363,6 +363,9 @@ class MockCallLabController(
       if(v.recording&&s.epoch>0&&routeTicket!=null){
         val out=requireNotNull(route.output)
         routeState.confirm(requireNotNull(routeTicket),RouteObservation(out.route,out.id,route.inputId,s.epoch,true))
+        if(route.inputDescription!=v.inputRoute){
+          changed{it.copy(inputRoute=route.inputDescription)}
+        }
       }
       drain(h)
       if(s.incomplete||s.dropped>0)recording?.incomplete("Native recording queue lost blocks")
