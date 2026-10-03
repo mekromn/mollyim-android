@@ -54,6 +54,7 @@ fun CallControls(
   audioOutputPickerController: AudioOutputPickerController,
   callAudioSession: CallAudioSession = ProductionCallAudioSession,
   callAudioStatsHeader: @Composable () -> Unit = {},
+  callControlsExtraContent: @Composable () -> Unit = {},
   modifier: Modifier = Modifier
 ) {
   val isPortrait = LocalConfiguration.current.orientation == Configuration.ORIENTATION_PORTRAIT
@@ -73,6 +74,8 @@ fun CallControls(
     verticalArrangement = spacedBy(30.dp),
     modifier = modifier.padding(bottom = bottom)
   ) {
+    callControlsExtraContent()
+
     if (callControlsState.displayEndCallButton && callControlsState.displayMicToggle) {
       CallAudioControls(
         onSheetDisplayChanged = callScreenSheetDisplayListener::onCallAudioSheetDisplayChanged,
