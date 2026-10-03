@@ -152,7 +152,6 @@ fun MockCallScreen(
       )
     },
     callScreenControlsListener = controlsListener,
-    callParticipantsPagerState = pagerState,
     overflowParticipants = emptyList(),
     localParticipant = localParticipant,
     localRenderState = WebRtcLocalRenderState.SMALLER_RECTANGLE,
