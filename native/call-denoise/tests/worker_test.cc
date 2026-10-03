@@ -54,8 +54,34 @@ struct Harness {
 };
 void defaults_and_off_identity(){Harness h;for(int n=0;n<20;++n){auto r=h.Step(n);assert(r.kind==OutputKind::Direct);assert(h.output[0]==(100+n)/32768.f);}assert(h.factory.created==0);}
 void late_output_uses_matched_dry(){Harness h;h.Enable();for(int n=0;n<12;++n)h.Step(n);h.Step(12,false);h.Step(13,false);auto r=h.Step(14,false);assert(r.kind==OutputKind::DelayedDry);assert(r.source.source_start==9*480);assert(h.output[0]==109/32768.f);h.receive.PumpForTest();}
-void three_misses_latch(){Harness h;h.Enable();for(int n=0;n<12;++n)h.Step(n);for(int n=12;n<19;++n)h.Step(n,false);assert(h.receive.Status().state==EffectiveState::Overloaded);int count=h.factory.processed;for(int n=19;n<30;++n)h.Step(n);assert(h.factory.processed==count);h.control.Retry(Direction::Received);for(int n=30;n<40;++n)h.Step(n);assert(h.factory.processed>count);}
-void rolling_26_of_500_latches_but_25_does_not(){OverloadWindow w;for(int n=0;n<500;++n)w.Observe(true,n%20==0);assert(!w.latched());w.Observe(true,false);assert(!w.latched());w.Observe(true,true);assert(!w.latched());w.Observe(true,true);assert(w.latched());}
+void three_misses_enter_safe_fallback_but_worker_recovers(){
+  Harness h;h.Enable();
+  for(int n=0;n<12;++n)h.Step(n);
+  for(int n=12;n<19;++n)h.Step(n,false);
+  assert(h.receive.Status().state==EffectiveState::Overloaded);
+  const int count=h.factory.processed;
+  bool recovered=false;
+  for(int n=19;n<90;++n){
+    auto result=h.Step(n);
+    assert(h.factory.processed>=count);
+    if(result.state==EffectiveState::Active){recovered=true;break;}
+  }
+  assert(h.factory.processed>count);
+  assert(recovered);
+}
+void overload_window_ignores_ineligible_slots_and_recovers_with_hysteresis(){
+  OverloadWindow w;
+  for(int n=0;n<1000;++n)assert(!w.Observe(false,false));
+  assert(!w.latched());
+  assert(!w.Observe(true,true));
+  assert(!w.Observe(true,true));
+  assert(w.Observe(true,true));
+  assert(w.latched());
+  for(int n=0;n<19;++n)assert(w.Observe(true,false));
+  assert(w.latched());
+  assert(!w.Observe(true,false));
+  assert(!w.latched());
+}
 void manual_bypass_suspends_inference_keeps_delay(){Harness h;h.Enable();for(int n=0;n<12;++n)h.Step(n);h.control.Bypass(Direction::Received,true);h.Step(12);int count=h.factory.processed;for(int n=13;n<24;++n){auto r=h.Step(n);assert(r.kind==OutputKind::DelayedDry);assert(r.source.source_start==(n-5)*480);assert(h.output[0]==(100+n-5)/32768.f);}assert(count==h.factory.processed);h.control.Bypass(Direction::Received,false);for(int n=24;n<36;++n)h.Step(n);assert(h.factory.processed>count);}
 void zero_is_aligned_dry(){Harness h;h.Enable();for(int n=0;n<12;++n)h.Step(n);DenoiseConfig c;c.enabled=true;c.parameters.attenuation_db=0;h.control.Update(Direction::Received,c);h.Step(12);int count=h.factory.processed;for(int n=13;n<24;++n)h.Step(n);assert(h.factory.processed==count);assert(h.output[0]==118/32768.f);}
 void settings_do_not_reset_stream(){Harness h;h.Enable();for(int n=0;n<12;++n)h.Step(n);auto creations=h.factory.created;DenoiseConfig c;c.enabled=true;c.parameters.attenuation_db=12;h.control.Update(Direction::Received,c);for(int n=12;n<17;++n)h.Step(n);assert(h.factory.created==creations);assert(h.factory.last.attenuation_db==12);}
@@ -106,5 +132,5 @@ void overload_survives_unsupported_format(){Harness h;h.Enable();for(int n=0;n<1
 void processing_failure_keeps_aligned_ordinary_audio(){Harness h;h.Enable();for(int n=0;n<12;++n)h.Step(n);h.factory.fail_process=true;h.Step(12);for(int n=13;n<25;++n){auto r=h.Step(n);assert(r.state==EffectiveState::Unavailable);assert(h.output[0]==(100+n-5)/32768.f);}assert(h.factory.live==0);}
 int main(){std::cout.setf(std::ios::unitbuf);
 #define RUN(t) t();std::cout<<#t<<" PASS\n";
-RUN(defaults_and_off_identity);RUN(late_output_uses_matched_dry);RUN(three_misses_latch);RUN(rolling_26_of_500_latches_but_25_does_not);RUN(manual_bypass_suspends_inference_keeps_delay);RUN(zero_is_aligned_dry);RUN(settings_do_not_reset_stream);RUN(receive_failure_does_not_stop_send);RUN(model_switch_load_failure);RUN(rapid_switch_has_no_old_epoch);RUN(off_returns_direct_and_no_replay);RUN(config_atomic_and_direction_isolation);RUN(generation_invalidates_audio);RUN(stress_no_callback_allocation);RUN(invalidate_during_actual_load);RUN(repeated_invalidate_without_frames);RUN(invalid_native_config_is_rejected);RUN(overload_survives_unsupported_format);RUN(processing_failure_keeps_aligned_ordinary_audio);
+RUN(defaults_and_off_identity);RUN(late_output_uses_matched_dry);RUN(three_misses_enter_safe_fallback_but_worker_recovers);RUN(overload_window_ignores_ineligible_slots_and_recovers_with_hysteresis);RUN(manual_bypass_suspends_inference_keeps_delay);RUN(zero_is_aligned_dry);RUN(settings_do_not_reset_stream);RUN(receive_failure_does_not_stop_send);RUN(model_switch_load_failure);RUN(rapid_switch_has_no_old_epoch);RUN(off_returns_direct_and_no_replay);RUN(config_atomic_and_direction_isolation);RUN(generation_invalidates_audio);RUN(stress_no_callback_allocation);RUN(invalidate_during_actual_load);RUN(repeated_invalidate_without_frames);RUN(invalid_native_config_is_rejected);RUN(overload_survives_unsupported_format);RUN(processing_failure_keeps_aligned_ordinary_audio);
 }
