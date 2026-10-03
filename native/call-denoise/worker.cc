@@ -161,7 +161,9 @@ struct DirectionProcessor::Impl {
     status.delay_samples=(result.kind==OutputKind::Direct||!plan)?0:plan->total_samples;
     status.input_peak=0;status.output_peak=0;for(size_t i=0;i<in.meta.samples();++i){status.input_peak=std::max(status.input_peak,std::abs(in.pcm[i]/32768.f));status.output_peak=std::max(status.output_peak,std::abs(out[i]));}
     status.levels_valid=in.meta.Valid();status.misses=misses.misses();
-    status.inference_valid=observed.epoch==epoch&&observed.count&&result.kind==OutputKind::Wet;
+    // Keep timing evidence valid while aligned dry fallback is protecting the
+    // call. Overload is an output choice, not a reason to hide worker timing.
+    status.inference_valid=observed.epoch==epoch&&observed.count&&!observed.failed;
     status.snr=status.inference_valid?observed.snr:0;status.mean_us=status.inference_valid?observed.mean_us:0;status.p95_us=status.inference_valid?observed.p95_us:0;
     status.processed=observed.epoch==epoch?observed.count:0;
     if(changed||++callback_count%10==0){status.updated_us=NowUs();status_bus.Publish(status);}
@@ -183,7 +185,7 @@ struct DirectionProcessor::Impl {
     const bool bypass_changed=next.bypassed!=config.bypassed||(next.config.parameters.attenuation_db==0)!=(config.config.parameters.attenuation_db==0);
     const bool retry=next.retry!=config.retry;
     const bool was_enabled=config.config.enabled;
-    if(new_call||retry)overload_latched=false;
+    if(new_call||retry||model_changed||(enabled_changed&&next.config.enabled)||(bypass_changed&&!next.bypassed))overload_latched=false;
     const bool new_epoch=stream_change||enabled_changed||model_changed||bypass_changed||retry;
     if(new_epoch){
       ++epoch;if(epoch==0)++epoch;observed={};misses.Reset();
@@ -194,7 +196,7 @@ struct DirectionProcessor::Impl {
       if(next.config.enabled)off_phase=0;
       if(next.config.enabled||!plan)plan=DelayPlan::For(in.meta.rate,in.meta.channels,ModelMeta(next.config.model));
     }
-    const bool active=next.config.enabled&&!next.bypassed&&next.config.parameters.attenuation_db>0&&!overload_latched;
+    const bool active=next.config.enabled&&!next.bypassed&&next.config.parameters.attenuation_db>0;
     if(new_epoch||next.revision!=config.revision){
       requested={epoch,cancellation,next,in.meta,active};request_bus.Publish(requested);Kick();
     }
@@ -223,7 +225,10 @@ struct DirectionProcessor::Impl {
     Drain(*represented);FilteredPacket wet;
     const bool has_wet=active&&!failed&&has_dry&&FindWet(*represented,wet);
     const bool eligible=active&&!failed&&has_dry&&observed.epoch==epoch&&observed.ready&&observed.started&&represented->source_start>=observed.first_source;
-    if(misses.Observe(eligible,!has_wet)&&!overload_latched){overload_latched=true;cancelled_epoch.store(epoch);Kick();}
+    // Overload never cancels inference. Keep the bounded worker running so it
+    // can measure the real cost and catch back up while the callback safely
+    // returns the time-aligned dry frame.
+    overload_latched=misses.Observe(eligible,!has_wet);
     if(overload_latched)result.state=EffectiveState::Overloaded;
     else if(failed)result.state=EffectiveState::Unavailable;
     else if(config.bypassed)result.state=EffectiveState::ManualBypass;
