@@ -355,6 +355,12 @@ class MockCallLabController(
     val v=mutableView.value
     if(v.playing){
       val route=h.route.observe()
+      if(route.output?.label!=v.actualRoute||route.inputDescription!=v.inputRoute){
+        changed{current->current.copy(
+          actualRoute=route.output?.label?:current.actualRoute,
+          inputRoute=route.inputDescription
+        )}
+      }
       if(route.output?.id!=v.requestedRoute||route.mode!=3||(v.recording&&(!h.route.microphonePermission()||route.silenced))){
         recording?.incomplete("Route, microphone privacy, or communication mode changed");retireHardware(false)
         changed{it.copy(message="Test stopped after route or microphone authorization changed")};return
