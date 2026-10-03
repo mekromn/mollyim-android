@@ -123,7 +123,7 @@
         <activity
             android:name=".webrtc.audio.mock.MockCallLabActivity"
             android:exported="false"
-            android:theme="@style/TextSecure.DarkNoActionBar"
+            android:theme="@style/TextSecure.DarkTheme.WebRTCCall"
             android:excludeFromRecents="true" />
 
         <activity
