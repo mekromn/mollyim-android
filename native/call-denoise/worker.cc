@@ -27,7 +27,7 @@ struct Timings {
   float Mean() const noexcept{return count?static_cast<float>(sum/count):0;}
   float P95() noexcept {if(!count)return 0;std::copy_n(values.begin(),count,sorted.begin());size_t at=(count*95+99)/100-1;auto window=std::span(sorted).first(count);std::nth_element(window.begin(),window.subspan(at).begin(),window.end());return sorted[at];}
 };
-DfMeta ModelMeta(Model model) noexcept {const uint32_t look=model==Model::Standard?2:0;return {1,48000,480,960,look,5,480+480*look};}
+DfMeta ModelMeta(Model model) noexcept {const uint32_t look=model==Model::LowLatency?0:2;return {1,48000,480,960,look,5,480+480*look};}
 bool SameStream(const PacketMeta& a,const PacketMeta& b) noexcept {return a.owner==b.owner&&a.generation==b.generation&&a.rate==b.rate&&a.channels==b.channels;}
 }
 struct DirectionProcessor::Impl {
