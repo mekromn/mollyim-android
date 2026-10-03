@@ -41,7 +41,10 @@ jobs:
           with tarfile.open(fileobj=io.BytesIO(data),mode='r:gz') as archive:
               for m in archive:
                   path=PurePosixPath(m.name)
-                  assert m.isfile() and not path.is_absolute() and '..' not in path.parts
+                  assert not path.is_absolute() and '..' not in path.parts and '\\' not in m.name and ':' not in m.name
+                  if m.isdir():
+                      continue
+                  assert m.isfile()
                   f=archive.extractfile(m); assert f is not None
                   b=f.read(); assert len(b)==m.size
                   members.append({'path':m.name,'bytes':len(b),'sha256':hashlib.sha256(b).hexdigest()})
