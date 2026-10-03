@@ -31,7 +31,16 @@ class MockCallLabController(
     val backend:String="Not acquired",val sources:List<Source?> = listOf(null,null),val takes:List<LabTake> = emptyList(),
     val selectionStartMs:Long=0,val selectionEndMs:Long=0,val loop:Boolean=false,val original:Boolean=false,
     val stats:LabStatsSnapshot=LabStatsSnapshot(),val frozen:Boolean=false,val snapshot:String="Custom",
-    val procedure:String="Fixed position",val retired:Boolean=false,val tapMask:Int=15
+    val procedure:String="Fixed position",val retired:Boolean=false,val tapMask:Int=15,
+    val benchmark:BenchmarkView=BenchmarkView()
+  )
+  data class BenchmarkView(
+    val running:Boolean=false,
+    val direction:Direction=Direction.SENT,
+    val currentModel:Model?=null,
+    val completed:Int=0,
+    val total:Int=3,
+    val summary:DenoiseBenchmarkSummary=DenoiseBenchmarkSummary()
   )
   private val executor=Executors.newSingleThreadScheduledExecutor{job->Thread(job,"mock-call-control-io").apply{isDaemon=true}}
   private val retired=AtomicBoolean(false)
@@ -53,6 +62,23 @@ class MockCallLabController(
   private var activeMask=0
   private var snapshotA:LabConfiguration?=null
   private var snapshotB:LabConfiguration?=null
+  private data class BenchmarkRun(
+    val direction:Direction,
+    val savedConfiguration:LabConfiguration,
+    val savedMode:LabMode,
+    val savedMonitor:Monitor,
+    val savedStart:Long,
+    val savedEnd:Long,
+    val savedLoop:Boolean,
+    val savedOriginal:Boolean,
+    val models:List<Model> = listOf(Model.STANDARD,Model.MOBILE_FUSED,Model.LOW_LATENCY),
+    val results:MutableList<DenoiseBenchmarkResult> = mutableListOf(),
+    var index:Int=0,
+    var startedAtMs:Long=0,
+    var fallbackOccurred:Boolean=false,
+    var maxMisses:Long=0
+  )
+  private var benchmarkRun:BenchmarkRun?=null
   private var modelsReady=false
   private var retiredFactory:CompletionStage<Void>?=null
   private var publishedAt=0L
@@ -92,6 +118,7 @@ class MockCallLabController(
   }
   fun barrier():CompletableFuture<Unit> = submit{}
   fun setVisible(visible:Boolean):CompletableFuture<Unit> = submit {
+    if(!visible&&benchmarkRun!=null)finishBenchmark(cancelled=true,reason="Benchmark stopped when the lab left the foreground")
     changed{it.copy(visible=visible)}
     routeState.environment(visible,hardware?.route?.microphonePermission()?:false)
     if(!visible)retireHardware(false)
@@ -231,10 +258,12 @@ class MockCallLabController(
     try{start(live,renderCapture)}catch(e:Exception){fail(e.message?:"Unable to start local audio");throw e}
   }
   fun prepareRoutes():CompletableFuture<Unit> = submit { acquire();Unit }
-  fun play():CompletableFuture<Unit> = submit{checkedStart(false)}
-  fun record():CompletableFuture<Unit> = submit{checkedStart(true)}
-  fun renderProcessed():CompletableFuture<Unit> = submit{checkedStart(false,true)}
-  fun pause():CompletableFuture<Unit> = submit{pauseInternal()}
+  fun play():CompletableFuture<Unit> = submit{check(benchmarkRun==null){"Benchmark is running"};checkedStart(false)}
+  fun record():CompletableFuture<Unit> = submit{check(benchmarkRun==null){"Benchmark is running"};checkedStart(true)}
+  fun renderProcessed():CompletableFuture<Unit> = submit{check(benchmarkRun==null){"Benchmark is running"};checkedStart(false,true)}
+  fun pause():CompletableFuture<Unit> = submit{
+    if(benchmarkRun!=null)finishBenchmark(cancelled=true,reason="Benchmark stopped") else pauseInternal()
+  }
   private fun pauseInternal(){
     val h=hardware
     val wasMicRecording=mutableView.value.recording
