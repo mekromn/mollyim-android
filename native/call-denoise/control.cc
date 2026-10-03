@@ -5,7 +5,7 @@ namespace molly_denoise {
 namespace {bool ValidDirection(Direction d){return d==Direction::Received||d==Direction::Sent;}}
 bool DenoiseConfig::Valid() const noexcept {
   const auto& p=parameters;
-  return (model==Model::Standard||model==Model::LowLatency)&&p.abi_version==1&&p.reserved==0
+  return (model==Model::Standard||model==Model::LowLatency||model==Model::MobileFused)&&p.abi_version==1&&p.reserved==0
       &&p.post_filter_enabled<=1&&std::isfinite(p.attenuation_db)&&p.attenuation_db>=0&&p.attenuation_db<=100
       &&std::isfinite(p.beta)&&p.beta>=0&&p.beta<=.05f
       &&std::isfinite(p.min_snr)&&std::isfinite(p.erb_snr)&&std::isfinite(p.df_snr)
