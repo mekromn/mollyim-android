@@ -74,7 +74,7 @@ class OverloadWindow {
   uint32_t misses() const noexcept{return misses_;}
  private:
   std::array<uint8_t,500> missed_{};
-  uint32_t cursor_=0,count_=0,misses_=0,consecutive_=0;
+  uint32_t cursor_=0,count_=0,misses_=0,consecutive_misses_=0,consecutive_hits_=0;
   bool latched_=false;
 };
 }
