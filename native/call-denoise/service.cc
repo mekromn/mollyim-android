@@ -53,9 +53,9 @@ DenoiseStatus NativeService::Status(Direction direction)noexcept {
 }
 TransportBinding::TransportBinding(NativeService& s,bool threaded):service_(s),transport_(s.Controls(),s.Factory(),s.CreationToken(),threaded){s.Attach(this);}
 TransportBinding::~TransportBinding(){service_.Detach(this);}
-bool ConfigurableFactory::SetPaths(std::string library,std::array<std::string,2> models){
+bool ConfigurableFactory::SetPaths(std::string library,std::array<std::string,3> models){
   const auto valid=[](const std::string& path){return !path.empty()&&path.front()=='/'&&path.size()<4096;};
-  if(!valid(library)||!valid(models[0])||!valid(models[1]))return false;
+  if(!valid(library)||!valid(models[0])||!valid(models[1])||!valid(models[2]))return false;
   std::lock_guard lock(mutex_);if(factory_&&library==library_&&models==models_)return true;
   library_=library;models_=models;factory_=std::make_shared<RuntimeFactory>(std::move(library),std::move(models));return true;
 }
