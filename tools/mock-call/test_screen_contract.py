@@ -42,6 +42,8 @@ class ScreenContracts(unittest.TestCase):
   self.assertNotIn('Text(if (view.playing) "Stop" else "Play")',overlay)
   self.assertIn('callControlsExtraContent = {',mock)
   self.assertIn('LabTestTransportControls(',mock)
+  self.assertIn('val canPlay =',mock)
+  self.assertIn('enabled = !view.retired && !view.recording && canPlay',mock)
 
  def test_echo_record_keeps_explicit_both_mode_across_permission(self):
   screen=(A/'components/webrtc/v2/MockCallScreen.kt').read_text()
