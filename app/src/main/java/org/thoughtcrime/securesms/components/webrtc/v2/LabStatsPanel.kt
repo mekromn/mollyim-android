@@ -24,13 +24,11 @@ fun LabStatsPanel(view:MockCallLabController.View,compact:Boolean=false,onExpand
       Text("${view.actualRoute} · ${view.phase}",style=MaterialTheme.typography.labelMedium)
       for((label,d) in listOf("Received" to view.stats.received,"Sent" to view.stats.sent)){
         Text("$label: ${if(view.playing)d.label else "Inactive"} · delay ${if(view.playing)ms(d.configuredDelayMs) else "—"} ms configured",style=MaterialTheme.typography.labelMedium)
-        if(!compact){
-          Text("Block time ${if(d.inferenceValid&&view.playing)ms(d.meanMs)+" / "+ms(d.p95Ms) else "— / —"} ms mean / p95 · missed ${d.misses}",style=MaterialTheme.typography.bodySmall)
-          if(d.levelsValid&&view.playing){
-            Row(horizontalArrangement=Arrangement.spacedBy(8.dp)){
-              LinearProgressIndicator(progress={d.inputPeak.coerceIn(0f,1f)},modifier=Modifier.weight(1f))
-              LinearProgressIndicator(progress={d.outputPeak.coerceIn(0f,1f)},modifier=Modifier.weight(1f))
-            }
+        Text("Block time ${if(d.inferenceValid&&view.playing)ms(d.meanMs)+" / "+ms(d.p95Ms) else "— / —"} ms mean / p95 · missed ${if(view.playing)d.misses.toString() else "—"}",style=MaterialTheme.typography.bodySmall)
+        if(d.levelsValid&&view.playing){
+          Row(horizontalArrangement=Arrangement.spacedBy(8.dp)){
+            LinearProgressIndicator(progress={d.inputPeak.coerceIn(0f,1f)},modifier=Modifier.weight(1f).height(if(compact)3.dp else 4.dp))
+            LinearProgressIndicator(progress={d.outputPeak.coerceIn(0f,1f)},modifier=Modifier.weight(1f).height(if(compact)3.dp else 4.dp))
           }
         }
       }

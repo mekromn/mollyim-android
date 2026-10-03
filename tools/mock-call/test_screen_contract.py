@@ -27,4 +27,9 @@ class ScreenContracts(unittest.TestCase):
   self.assertIsNotNone(m);self.assertIn('android:exported="false"',m[0])
   h=(A/'components/settings/app/help/HelpSettingsFragment.kt').read_text()
   self.assertIn('MockCallLabActivity',h)
+ def test_compact_stats_keep_timing_misses_and_levels_visible(self):
+  s=(A/'components/webrtc/v2/LabStatsPanel.kt').read_text().split('@OptIn',1)[0]
+  self.assertNotIn('if(!compact)',s,'Pinned stats must not hide processing time, faults or meters')
+  for x in ('d.meanMs','d.p95Ms','d.misses','d.inputPeak','d.outputPeak'):
+   self.assertIn(x,s)
 if __name__=='__main__':unittest.main()

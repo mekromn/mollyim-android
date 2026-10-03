@@ -13,7 +13,7 @@ permissions:
   actions: read
 concurrency:
   group: mock-call-app-${{ github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: true
 jobs:
   source-check:
     runs-on: ubuntu-24.04
