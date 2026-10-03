@@ -133,7 +133,7 @@ fun MockCallScreen(
     webRtcCallState = WebRtcViewModel.State.CALL_CONNECTED,
     isRemoteVideoOffer = false,
     isInPipMode = false,
-    callScreenState = CallScreenState(callStatus = "LOCAL TEST — ${view.phase}"),
+    callScreenState = CallScreenState(callStatus = "LOCAL TEST — Nobody is connected · ${view.phase}"),
     callControlsState = controlsState,
     callParticipantsPagerState = pagerState,
     callScreenController = screenController,
@@ -149,16 +149,7 @@ fun MockCallScreen(
         onDiagnostics = { diagnostics = true }
       )
     },
-    callScreenOverlay = {
-      LabNativeOverlay(
-        view = view,
-        modifier = Modifier
-          .align(Alignment.TopCenter)
-          .statusBarsPadding()
-          .padding(top = 72.dp, start = 16.dp, end = 16.dp)
-      )
-    },
-    callScreenControlsListener = controlsListener,
+callScreenControlsListener = controlsListener,
     overflowParticipants = emptyList(),
     localParticipant = localParticipant,
     localRenderState = WebRtcLocalRenderState.SMALLER_RECTANGLE,
@@ -301,39 +292,6 @@ private fun LabRouteChoice.asWebRtcOutput(): WebRtcAudioOutput {
       WebRtcAudioOutput.BLUETOOTH_HEADSET
     } else {
       WebRtcAudioOutput.WIRED_HEADSET
-    }
-  }
-}
-
-@Composable
-private fun LabNativeOverlay(
-  view: MockCallLabController.View,
-  modifier: Modifier = Modifier
-) {
-  Surface(
-    modifier = modifier,
-    shape = MaterialTheme.shapes.extraLarge,
-    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.90f),
-    tonalElevation = 2.dp
-  ) {
-    Row(
-      modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
-      verticalAlignment = Alignment.CenterVertically,
-      horizontalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-      Text(
-        "LOCAL TEST · no network call",
-        style = MaterialTheme.typography.labelLarge,
-        modifier = Modifier.testTag("lab-local-only")
-      )
-      if (view.recording) {
-        Text(
-          "● REC",
-          color = MaterialTheme.colorScheme.error,
-          style = MaterialTheme.typography.labelLarge,
-          modifier = Modifier.testTag("lab-recording")
-        )
-      }
     }
   }
 }
