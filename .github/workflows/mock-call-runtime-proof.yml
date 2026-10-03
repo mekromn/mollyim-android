@@ -19,8 +19,8 @@ jobs:
       - name: Establish exact repaired app build
         env:
           GH_TOKEN: ${{ github.token }}
-          APP_RUN: '37136793888'
-          APP_SOURCE: 'fd020c11b4ef25cf1cf75d079ec9d8879e98696c'
+          APP_RUN: '37137619850'
+          APP_SOURCE: '07256bb2ff2b86a354c758b3f7b252f1fcf14da8'
         run: |
           set -euo pipefail
           mkdir -p out/mock-runtime-proof
@@ -52,13 +52,13 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: molly-mock-call-lab-unsigned
-          run-id: 37136793888
+          run-id: 37137619850
           github-token: ${{ github.token }}
           path: out/compiled
       - uses: actions/download-artifact@v4
         with:
           name: molly-mock-sdk-tools
-          run-id: 37136793888
+          run-id: 37137619850
           github-token: ${{ github.token }}
           path: out/sdk
       - uses: actions/download-artifact@v4
