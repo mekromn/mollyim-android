@@ -29,17 +29,15 @@ class ScreenContracts(unittest.TestCase):
 
   call_screen=(A/'components/webrtc/v2/CallScreen.kt').read_text()
   self.assertIn('callAudioSession: CallAudioSession = ProductionCallAudioSession',call_screen)
-  self.assertIn('callScreenOverlay: @Composable BoxScope.() -> Unit = {}',call_screen)
+  self.assertNotIn('callScreenOverlay:',call_screen)
+  self.assertNotIn('callScreenOverlay()',call_screen)
   self.assertIn('callControlsExtraContent: @Composable () -> Unit = {}',call_screen)
   self.assertIn('callAudioSession = callAudioSession',call_screen)
   self.assertIn('callControlsExtraContent = callControlsExtraContent',call_screen)
-  self.assertIn('callScreenOverlay()',call_screen)
 
   mock=(A/'components/webrtc/v2/MockCallScreen.kt').read_text()
-  overlay=mock[mock.index('private fun LabNativeOverlay'):mock.index('@OptIn(ExperimentalLayoutApi::class)',mock.index('private fun LabNativeOverlay'))]
-  self.assertNotIn('LabStatsPanel(',overlay)
-  self.assertNotIn('Text("Record")',overlay)
-  self.assertNotIn('Text(if (view.playing) "Stop" else "Play")',overlay)
+  self.assertNotIn('LabNativeOverlay(',mock)
+  self.assertIn('LOCAL TEST — Nobody is connected',mock)
   self.assertIn('callControlsExtraContent = {',mock)
   self.assertIn('LabTestTransportControls(',mock)
   self.assertIn('val canPlay =',mock)
