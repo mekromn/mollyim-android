@@ -37,6 +37,8 @@ import org.thoughtcrime.securesms.components.webrtc.ToggleButtonOutputState
 import org.thoughtcrime.securesms.components.webrtc.WebRtcAudioOutput
 import org.thoughtcrime.securesms.components.webrtc.WebRtcControls
 import org.thoughtcrime.securesms.util.RemoteConfig
+import org.thoughtcrime.securesms.webrtc.audio.CallAudioSession
+import org.thoughtcrime.securesms.webrtc.audio.ProductionCallAudioSession
 
 /**
  * Renders the button strip / start call button in the call screen
@@ -50,6 +52,8 @@ fun CallControls(
   callScreenSheetDisplayListener: CallScreenSheetDisplayListener,
   additionalActionsState: AdditionalActionsState,
   audioOutputPickerController: AudioOutputPickerController,
+  callAudioSession: CallAudioSession = ProductionCallAudioSession,
+  callAudioStatsHeader: @Composable () -> Unit = {},
   modifier: Modifier = Modifier
 ) {
   val isPortrait = LocalConfiguration.current.orientation == Configuration.ORIENTATION_PORTRAIT
@@ -71,7 +75,9 @@ fun CallControls(
   ) {
     if (callControlsState.displayEndCallButton && callControlsState.displayMicToggle) {
       CallAudioControls(
-        onSheetDisplayChanged = callScreenSheetDisplayListener::onCallAudioSheetDisplayChanged
+        onSheetDisplayChanged = callScreenSheetDisplayListener::onCallAudioSheetDisplayChanged,
+        session = callAudioSession,
+        statsHeader = callAudioStatsHeader
       )
     }
 
