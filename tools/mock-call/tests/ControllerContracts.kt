@@ -32,9 +32,10 @@ private class FakeEngine : LabNativePort {
 }
 private class FakeRoute : LabRoutePort {
   var selected:LabRouteChoice?=null;var permission=true;var closed=false
+  var inputDescription="Input metadata"
   override fun choices()=listOf(LabRouteChoice(1,CallRoute.HANDSET,"Earpiece"),LabRouteChoice(2,CallRoute.SPEAKERPHONE,"Speakerphone"))
   override fun start(choice:LabRouteChoice){selected=choice}
-  override fun observe()=LabRouteObservation(selected,9,"Input metadata",!permission,3)
+  override fun observe()=LabRouteObservation(selected,9,inputDescription,!permission,3)
   override fun microphonePermission()=permission
   override val routeError=false
   override fun shutdown()=CompletableFuture.completedFuture<Void>(null).also{closed=true}
@@ -59,6 +60,9 @@ fun main(){
   check(route.selected?.id==2 && c.view.value.actualRoute=="Speakerphone") {"Idle native route selection must change the actual communication device, not only the requested ID"}
   check(engine.microphoneStarts==0) {"Selecting a route must not open the microphone"}
   c.setMode(LabMode.SENT).get();c.record().get();check(engine.microphoneStarts==1)
+  route.inputDescription="Active VOICE_COMMUNICATION input"
+  Thread.sleep(40);c.barrier().get()
+  check(c.view.value.inputRoute=="Active VOICE_COMMUNICATION input") {"Active microphone route metadata must refresh after capture starts"}
   engine.queued=2;engine.sourceStart=0
   c.pause().get()
   check(c.view.value.takes.any{it.label.endsWith("microphone take")&&it.complete&&it.tracks.any{track->track.frames==160L}}) {"Stopping must finalize current-epoch accepted samples as complete"}
