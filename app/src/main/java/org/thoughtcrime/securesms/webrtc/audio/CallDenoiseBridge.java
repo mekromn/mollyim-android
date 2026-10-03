@@ -14,9 +14,9 @@ public final class CallDenoiseBridge {
     catch (Exception | LinkageError ignored) { return false; }
   }
 
-  public static boolean paths(String library, String standard, String lowLatency) {
-    if (library == null || standard == null || lowLatency == null) return false;
-    try { return nativePaths(library, standard, lowLatency); }
+  public static boolean paths(String library, String standard, String lowLatency, String mobileFused) {
+    if (library == null || standard == null || lowLatency == null || mobileFused == null) return false;
+    try { return nativePaths(library, standard, lowLatency, mobileFused); }
     catch (Exception | LinkageError ignored) { return false; }
   }
 
@@ -51,7 +51,7 @@ public final class CallDenoiseBridge {
   }
 
   private static native int nativeVersion();
-  private static native boolean nativePaths(String library, String standard, String lowLatency);
+  private static native boolean nativePaths(String library, String standard, String lowLatency, String mobileFused);
   private static native boolean nativeApply(int direction, boolean enabled, int model, float attenuation,
                                            boolean postFilter, float beta, float minimum, float erb, float df);
   private static native void nativeBypass(int direction, boolean bypassed);
