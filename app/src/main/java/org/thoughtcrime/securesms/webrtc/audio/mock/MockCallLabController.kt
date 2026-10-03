@@ -247,7 +247,9 @@ class MockCallLabController(
   fun selectRoute(id:Int):CompletableFuture<Unit> = submit {
     val wasRecording=mutableView.value.recording;val wasPlaying=mutableView.value.playing
     pauseInternal();changed{it.copy(requestedRoute=id)}
-    if(wasRecording)checkedStart(true)else if(wasPlaying)checkedStart(false)
+    if(wasRecording)checkedStart(true)
+    else if(wasPlaying)checkedStart(false)
+    else confirmedRoute(acquire(),false)
   }
   fun setMonitor(monitor:Monitor):CompletableFuture<Unit> = submit {
     if(mutableView.value.recording){pauseInternal();changed{it.copy(message="Microphone stopped. Select a recorded Sent take to audition it.",monitor=monitor)};return@submit}
