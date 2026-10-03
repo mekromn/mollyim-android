@@ -17,7 +17,6 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -118,7 +117,6 @@ fun CallScreen(
   callAudioSession: CallAudioSession = ProductionCallAudioSession,
   callAudioStatsHeader: @Composable () -> Unit = {},
   callControlsExtraContent: @Composable () -> Unit = {},
-  callScreenOverlay: @Composable BoxScope.() -> Unit = {},
   callScreenControlsListener: CallScreenControlsListener = CallScreenControlsListener.Empty,
   callScreenSheetDisplayListener: CallScreenSheetDisplayListener = CallScreenSheetDisplayListener.Empty,
   additionalActionsListener: AdditionalActionsListener = AdditionalActionsListener.Empty,
@@ -502,7 +500,6 @@ fun CallScreen(
         )
       }
     }
-    callScreenOverlay()
   }
 
   if (callScreenState.isParticipantUpdatePopupEnabled) {
