@@ -46,13 +46,16 @@ object RingRtcDynamicConfiguration {fun getAudioConfig()=org.signal.ringrtc.Audi
  files.append(write('Controllers.kt','''package org.thoughtcrime.securesms.webrtc.audio
 import android.content.Context
 import kotlinx.coroutines.flow.MutableStateFlow
-object CallDenoiseController {val state=MutableStateFlow(DenoiseUiSnapshot());fun update(d:Direction,s:DenoiseSettings,p:Boolean){};fun save(){}}
-object IncomingAudioController {val settings=MutableStateFlow(IncomingAudioSettings());fun initialize(c:Context){};fun update(s:IncomingAudioSettings,p:Boolean){};fun save(){}}
+// The real controller delegates through a nullable coordinator. Preserve
+// nullable Unit return types so the production adapter is actually checked.
+object CallDenoiseController {val state=MutableStateFlow(DenoiseUiSnapshot());fun update(d:Direction,s:DenoiseSettings,p:Boolean):Unit?=null;fun setBypassed(d:Direction,b:Boolean):Unit?=null;fun retry(d:Direction):Unit?=null;fun reset(d:Direction):Unit?=null;fun readStatus(d:Direction)=DenoiseStatus();fun save(){}}
+object IncomingAudioController {val settings=MutableStateFlow(IncomingAudioSettings());val available=true;fun initialize(c:Context){};fun update(s:IncomingAudioSettings,p:Boolean=true){};fun save(){}}
+object IncomingAudioBridge {fun reset(){};fun readMeters(v:FloatArray)=0L}
 object DeepFilterAssets {fun install(c:Context)=true}
 sealed class AudioManagerCommand {class Initialize:AudioManagerCommand();class Start:AudioManagerCommand();class SetUserDevice(val recipient:Any?,val id:Int,val isId:Boolean):AudioManagerCommand()}
 class SignalAudioManager {enum class AudioDevice {NONE};interface EventListener {fun onAudioDeviceChanged(a:AudioDevice,d:Set<AudioDevice>);fun onAudioDeviceChangeFailed();fun onBluetoothPermissionDenied()};fun configureForLocalTest(){};fun handleCommand(c:AudioManagerCommand){};fun shutdown(r:Runnable?){r?.run()};companion object {fun create(c:Context,l:EventListener?,t:Boolean)=SignalAudioManager()}}
 '''))
- source=(A/'CallAudioSession.kt').read_text().split('/** Ordinary calls')[0]
+ source=(A/'CallAudioSession.kt').read_text()
  files.append(write('CallAudioSession.kt',source))
  source=(A/'CallDenoiseController.kt').read_text();files.append(write('DenoiseStatus.kt','package org.thoughtcrime.securesms.webrtc.audio\n'+source[source.index('data class DenoiseStatus('):]))
  files += [str(A/(n+'.kt')) for n in ('CallDenoiseSettings','IncomingAudioSettings','DenoiseCoordinator')]
@@ -60,4 +63,4 @@ class SignalAudioManager {enum class AudioDevice {NONE};interface EventListener 
  result=subprocess.run(['kotlinc',*files,'-cp',str(coroutines),'-d',str(w/'glue.jar')],capture_output=True,text=True)
  if result.returncode:
   print(result.stdout+result.stderr);raise SystemExit(result.returncode)
- print('PASS Android-facing route, production preemption and controller glue compilation (API fixtures, NOT device execution).')
+ print('PASS complete production/lab session adapters, route, preemption and controller glue compilation (API fixtures, NOT device execution).')

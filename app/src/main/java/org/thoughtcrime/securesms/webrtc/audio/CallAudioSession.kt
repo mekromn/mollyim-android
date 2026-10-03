@@ -41,11 +41,11 @@ object ProductionCallAudioSession : CallAudioSession {
   }.stateIn(scope, SharingStarted.Eagerly, CallAudioUiState(CallDenoiseController.state.value, IncomingAudioController.settings.value))
   override val effectsAvailable: Boolean get() = IncomingAudioController.available
   override fun initialize(context: Context) = IncomingAudioController.initialize(context)
-  override fun updateDenoise(direction: Direction, settings: DenoiseSettings) = CallDenoiseController.update(direction, settings, false)
+  override fun updateDenoise(direction: Direction, settings: DenoiseSettings) { CallDenoiseController.update(direction, settings, false) }
   override fun updateEffects(settings: IncomingAudioSettings) = IncomingAudioController.update(settings, false)
-  override fun setBypassed(direction: Direction, bypassed: Boolean) = CallDenoiseController.setBypassed(direction, bypassed)
-  override fun retry(direction: Direction) = CallDenoiseController.retry(direction)
-  override fun reset(direction: Direction) = CallDenoiseController.reset(direction)
+  override fun setBypassed(direction: Direction, bypassed: Boolean) { CallDenoiseController.setBypassed(direction, bypassed) }
+  override fun retry(direction: Direction) { CallDenoiseController.retry(direction) }
+  override fun reset(direction: Direction) { CallDenoiseController.reset(direction) }
   override fun resetEffects() { IncomingAudioBridge.reset(); IncomingAudioController.update(IncomingAudioSettings()) }
   override fun save() { IncomingAudioController.save(); CallDenoiseController.save() }
   override fun readStatus() = CallAudioStatus(CallDenoiseController.readStatus(Direction.RECEIVED), CallDenoiseController.readStatus(Direction.SENT))

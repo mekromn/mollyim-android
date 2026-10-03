@@ -4,7 +4,9 @@ on:
     branches: [feature/mock-call-lab]
     paths:
       - '.github/workflows/mock-call-app.yml'
-      - 'tools/mock-call/staged-app.*'
+      - 'app/src/main/**'
+      - 'app/build.gradle.kts'
+      - 'tools/mock-call/**'
   workflow_dispatch:
 permissions:
   contents: read
@@ -13,79 +15,23 @@ concurrency:
   group: mock-call-app-${{ github.ref }}
   cancel-in-progress: false
 jobs:
-  publish-source:
+  source-check:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
-    permissions:
-      contents: write
-    outputs:
-      source: ${{ steps.publish.outputs.source }}
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 100
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '21'
-      - name: Reconstruct only hash-verified app source
+      - name: Verify checked-in application source without rewriting it
         run: |
           test "$GITHUB_REF" = refs/heads/feature/mock-call-lab
           mkdir -p out/mock-app-source
-          python3 - <<'PY'
-          import base64,hashlib,json,lzma,subprocess
-          from pathlib import Path
-          m=json.loads(Path('tools/mock-call/staged-app.json').read_text())
-          subprocess.run(['git','merge-base','--is-ancestor',m['base'],'HEAD'],check=True)
-          parts=[]
-          for n,expected in enumerate(m['part_sha256']):
-              b=Path(f'tools/mock-call/staged-app.part{n}.b64').read_bytes()
-              assert hashlib.sha256(b).hexdigest()==expected
-              parts.append(b.strip())
-          encoded=b''.join(parts);assert len(encoded)==m['encoded_size']
-          decoder=lzma.LZMADecompressor(memlimit=134217728)
-          patch=decoder.decompress(base64.b64decode(encoded,validate=True),max_length=512000)
-          assert decoder.eof and not decoder.unused_data and len(patch)==m['patch_size']
-          assert hashlib.sha256(patch).hexdigest()==m['patch_sha256']
-          for name in m['files']:
-              p=Path(name);assert not p.is_absolute() and '..' not in p.parts
-              assert name.startswith(('app/src/main/','tools/mock-call/'))
-          if not all(Path(p).is_file() and hashlib.sha256(Path(p).read_bytes()).hexdigest()==h for p,h in m['files'].items()):
-              subprocess.run(['git','apply','--check','-'],input=patch,check=True)
-              subprocess.run(['git','apply','-'],input=patch,check=True)
-          for p,h in m['files'].items():assert hashlib.sha256(Path(p).read_bytes()).hexdigest()==h,p
-          print('Verified',len(m['files']),'exact tested source files.')
-          PY
-      - name: Run recording, route, privacy, controller and UI source contracts
-        run: |
           set -o pipefail
           bash tools/mock-call/test_app.sh 2>&1 | tee out/mock-app-source/tests.log
           python3 tools/mock-call/test_apk_verifier.py 2>&1 | tee out/mock-app-source/apk-contracts.log
           git diff --check
-      - name: Publish tested app files and increasing update version
-        id: publish
-        run: |
-          python3 - <<'PY'
-          import hashlib,json,subprocess
-          from pathlib import Path
-          m=json.loads(Path('tools/mock-call/staged-app.json').read_text())
-          for p,h in m['files'].items():assert hashlib.sha256(Path(p).read_bytes()).hexdigest()==h,p
-          p=Path('app/build.gradle.kts');s=p.read_text()
-          old='val currentHotfixVersion = 2';new='val currentHotfixVersion = 3'
-          if new not in s:
-              assert s.count(old)==1;s=s.replace(old,new,1);p.write_text(s)
-          assert 'val canonicalVersionCode = 1719' in s and 'val mollyRevision = 4' in s and 'val maxHotfixVersions = 100' in s
-          subprocess.run(['git','add','--',*m['files'],'app/build.gradle.kts'],check=True)
-          PY
-          git config user.name 'Molly Audio build'
-          git config user.email 'builder@localhost'
-          if ! git diff --cached --quiet; then
-            git fetch origin feature/mock-call-lab
-            test "$(git rev-parse origin/feature/mock-call-lab)" = "$GITHUB_SHA"
-            git commit -m 'feat(mock): add local call screen, physical capture controls and lossless recordings' -m 'Source hashes and host contracts verified before publication. Actual Android compilation, APK verification and physical-device validation remain separate gates. Preserve account, original key and ordinary call settings.'
-            git push origin HEAD:feature/mock-call-lab
-          fi
-          echo "source=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
           git rev-parse HEAD > out/mock-app-source/source-revision.txt
           git archive --format=tar.gz HEAD > out/mock-app-source/source.tar.gz
       - uses: actions/upload-artifact@v4
@@ -95,13 +41,11 @@ jobs:
           path: out/mock-app-source/
           if-no-files-found: error
   apk:
-    needs: publish-source
+    needs: source-check
     runs-on: ubuntu-24.04
     timeout-minutes: 100
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: ${{ needs.publish-source.outputs.source }}
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
