@@ -60,13 +60,13 @@ class TransportBinding {
 // dynamic runtime; a disabled settings edit never loads or instantiates it.
 class ConfigurableFactory final:public EngineFactory {
  public:
-  bool SetPaths(std::string library,std::array<std::string,2> models);
+  bool SetPaths(std::string library,std::array<std::string,3> models);
   std::unique_ptr<StreamingEngine>Create(Model,uint32_t,const DfConfig&)override;
  private:
   std::mutex mutex_;
   std::shared_ptr<RuntimeFactory> factory_;
   std::string library_;
-  std::array<std::string,2> models_;
+  std::array<std::string,3> models_;
   // Old and replacement factories cannot temporarily create >4 contexts.
   // Waiting for a permit is worker-only and bounded; callbacks keep dry audio.
   std::counting_semaphore<4> budget_{4};
