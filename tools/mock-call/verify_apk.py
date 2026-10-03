@@ -31,7 +31,11 @@ def manifest(text):
    while end<len(lines) and len(lines[end])-len(lines[end].lstrip())>indent:end+=1
    block='\n'.join(lines[i:end])
    if target in block:found.append(block)
- if len(found)!=1 or not re.search(r'android:exported[^\n]*\(type 0x12\)0x0\s*$',found[0],re.M):raise ValueError('Mock activity absent or exported')
+ # SDK36 aapt2 expands the Android namespace and renders typed booleans
+ # as true/false; older dumps show the numeric TYPE_INT_BOOLEAN encoding.
+ # Accept only the exact Android exported attribute with explicit false.
+ exported=r'^\s*A: (?:android:|http://schemas\.android\.com/apk/res/android:)exported\(0x01010010\)=(?:false|\(type 0x12\)0x0)\s*$'
+ if len(found)!=1 or len(re.findall(exported,found[0],re.M))!=1:raise ValueError('Mock activity absent or exported')
  return {'mock_activity':target,'exported':False}
 
 def verify_mock_dex(text):return df.verify_dexdump(text,MOCK_JNI)

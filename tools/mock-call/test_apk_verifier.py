@@ -25,6 +25,20 @@ class PackageTests(unittest.TestCase):
   manifest(s)
   for wrong in [s.replace('(type 0x12)0x0','(type 0x12)0xffffffff'),s.replace('MockCallLabActivity','OtherActivity')]:
    with self.assertRaises(ValueError):manifest(wrong)
+ def test_sdk36_expanded_namespace_and_boolean(self):
+  s='''E: manifest (line=1)
+  E: application (line=3)
+    E: activity (line=215)
+      A: http://schemas.android.com/apk/res/android:name(0x01010003)="org.thoughtcrime.securesms.webrtc.audio.mock.MockCallLabActivity" (Raw: "org.thoughtcrime.securesms.webrtc.audio.mock.MockCallLabActivity")
+      A: http://schemas.android.com/apk/res/android:exported(0x01010010)=false
+      A: http://schemas.android.com/apk/res/android:excludeFromRecents(0x01010017)=true
+    E: activity (line=220)
+      A: http://schemas.android.com/apk/res/android:name(0x01010003)="OtherActivity"
+      A: http://schemas.android.com/apk/res/android:exported(0x01010010)=true
+'''
+  self.assertFalse(manifest(s)['exported'])
+  for wrong in [s.replace('=false','=true'),s.replace(':exported(0x01010010)=false',':exported(0x01010010)=unknown'),s.replace('android:exported','untrusted:exported'),s+s]:
+   with self.assertRaises(ValueError):manifest(wrong)
  def test_missing_mock_native_defs_rejected(self):
   self.assertIsNotNone(verify_mock_dex)
   with self.assertRaises(ValueError):verify_mock_dex('')
