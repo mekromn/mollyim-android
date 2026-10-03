@@ -12,16 +12,33 @@ private class FakeEngine : LabNativePort {
   val data=FloatArray(128).also{it[0]=1f;it[1]=1f;it[4]=1f;it[5]=1f;it[6]=1f;it[116]=-1f;it[117]=-1f}
   var queued=0;var sourceStart=0L
   var microphoneStarts=0;var configureCount=0;var revoked=false;var closed=false
+  var simulateBenchmark=false;var receivedModel=0;var sentModel=0
   private var serial=0L
   private fun ack():Long=(++serial).also{data[3]=it.toFloat()}
-  override fun configure(values:FloatArray):Long {check(values.size==41);configureCount++;return ack()}
+  override fun configure(values:FloatArray):Long {
+    check(values.size==41);configureCount++;receivedModel=values[2].toInt();sentModel=values[10].toInt();return ack()
+  }
   override fun command(op:Int,a:Long,b:Long,c:Long,d:Long):Long {
     check(!closed)
-    when(op){1->{if(b==1L)microphoneStarts++;data[1]=2f;data[4]=0f;data[5]++;data[7]=a.toFloat()};2->{data[1]=3f;data[4]=1f};3->{data[13]=a.toFloat();data[5]++};4->data[6]=a.toFloat()}
+    when(op){1->{if(b==1L)microphoneStarts++;data[1]=2f;data[4]=0f;data[5]++;data[7]=a.toFloat();data[9]=0f;data[28]=0f;data[44]=0f};2->{data[1]=3f;data[4]=1f};3->{data[13]=a.toFloat();data[5]++};4->data[6]=a.toFloat()}
     return ack()
   }
   override fun load(direction:Int,rate:Int,channels:Int,pcm:ShortArray):Long {check(data[4]==1f);return ack()}
-  override fun status(values:FloatArray):Boolean {data.copyInto(values);return !closed}
+  override fun status(values:FloatArray):Boolean {
+    if(simulateBenchmark&&data[1]==2f){
+      val sent=data[7].toInt()==1
+      val o=if(sent)32 else 16
+      val model=if(sent)sentModel else receivedModel
+      data[o]=2f;data[o+1]=48000f;data[o+2]=1f;data[o+3]=if(model==1)10f else 50f
+      data[o+4]=if(model==1)4f else 0f;data[o+7]=8f
+      data[o+8]=when(model){2->3000f;0->6000f;else->9000f}
+      data[o+9]=when(model){2->4500f;0->8000f;else->12000f}
+      data[o+10]=1f;data[o+11]=1f;data[o+12]+=25f
+      data[8]+=250f
+      if(data[o+12]>=225f)data[9]=1f
+    }
+    data.copyInto(values);return !closed
+  }
   override fun drain(tap:Int,metadata:LongArray,pcm:FloatArray):Int {
     if(tap!=1||queued==0)return 0
     val m=longArrayOf(1,data[5].toLong(),data[6].toLong(),1,1,8000,1,80,sourceStart,1000000,1,0,0,0,0,0)
@@ -69,6 +86,21 @@ fun main(){
   val replay=c.view.value.sources[Direction.SENT.wireId]
   check(replay!=null && replay.track.tap==1 && replay.track.frames==160L) {"A completed microphone take must become the Sent replay source immediately"}
   check(c.view.value.selectionStartMs==0L && c.view.value.selectionEndMs==20L) {"Auto-selected replay must expose its whole recorded interval"}
+
+  val longWav=File(root,"benchmark.wav")
+  LabWaveCodec.Writer(longWav,8000,1,WaveEncoding.PCM16).use{it.append(FloatArray(32000){0.125f})}
+  val longTake=c.importWave({longWav.inputStream()},"Benchmark source").get()
+  c.selectSource(Direction.SENT,longTake.id,0).get()
+  engine.simulateBenchmark=true
+  c.benchmark(Direction.SENT).get()
+  val benchmarkDeadline=System.nanoTime()+java.util.concurrent.TimeUnit.SECONDS.toNanos(5)
+  while(c.view.value.benchmark.running&&System.nanoTime()<benchmarkDeadline)Thread.sleep(10)
+  val benchmark=c.view.value.benchmark
+  check(!benchmark.running&&benchmark.summary.results.size==3) {"Benchmark must complete all three real worker models"}
+  check(benchmark.summary.realtimePick==Model.MOBILE_FUSED) {"Stable lowest-p95 model should be the realtime speed pick"}
+  check(c.state.value.denoise.settings.sent.model==Model.STANDARD) {"Benchmark must restore temporary lab settings"}
+  check(engine.microphoneStarts==1) {"Replay benchmark must never reopen the microphone"}
+
   c.applyToCalls(setOf(LabSection.SENT_DENOISE)).get();check(applies==1)
   allowed.set(false);c.preempt().toCompletableFuture().get();check(engine.revoked)
   check(runCatching{c.record().get()}.isFailure);check(engine.microphoneStarts==1)
