@@ -42,9 +42,19 @@ bool DenoiseControl::Read(Direction d,ControlSnapshot& out) const noexcept {
   out=pair[static_cast<size_t>(d)];return true;
 }
 bool OverloadWindow::Observe(bool eligible,bool miss) noexcept {
-  miss=eligible&&miss;misses_-=missed_[cursor_];missed_[cursor_]=miss?1:0;misses_+=missed_[cursor_];
+  // Loading, mute and bypass do not age the deadline window and cannot count
+  // as artificial successes. Only frames for which wet output was actually
+  // expected participate in overload and recovery decisions.
+  if(!eligible)return latched_;
+  misses_-=missed_[cursor_];missed_[cursor_]=miss?1:0;misses_+=missed_[cursor_];
   cursor_=(cursor_+1)%500;if(count_<500)++count_;
-  consecutive_=miss?consecutive_+1:0;
-  latched_=latched_||consecutive_>=3||(count_==500&&misses_>25);return latched_;
+  if(miss){++consecutive_misses_;consecutive_hits_=0;}
+  else {consecutive_misses_=0;++consecutive_hits_;}
+  if(!latched_&&(consecutive_misses_>=3||(count_==500&&misses_>25)))latched_=true;
+  // Twenty consecutive on-time wet frames (200 ms) prove the worker has
+  // caught up. For a full rolling window, also require the miss ratio to be
+  // back within the normal <=5% budget before resuming wet output.
+  if(latched_&&consecutive_hits_>=20&&(count_<500||misses_<=25))latched_=false;
+  return latched_;
 }
 }
