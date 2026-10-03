@@ -237,9 +237,26 @@ class MockCallLabController(
   fun pause():CompletableFuture<Unit> = submit{pauseInternal()}
   private fun pauseInternal(){
     val h=hardware
+    val wasMicRecording=mutableView.value.recording
     if(h!=null&&mutableView.value.playing){measured=await(h.native.command(2));drain(h)}
     captureAllowed.set(false);routeState.stopCapture()
-    recording?.let{r->runCatching{r.finish()}.onSuccess{t->changed{it.copy(message=if(t.complete)"Take captured locally" else "Incomplete take: ${t.reason}")}}.onFailure{changed{v->v.copy(message="Recording finalization failed")}}}
+    recording?.let{r->runCatching{r.finish()}.onSuccess{t->
+      changed{view->
+        val replayTrack=if(wasMicRecording&&t.complete)t.tracks.firstOrNull{track->track.tap==1}else null
+        if(replayTrack!=null){
+          val selected=view.sources.toMutableList()
+          selected[Direction.SENT.wireId]=Source(t,replayTrack)
+          view.copy(
+            message="Microphone take ready for Sent replay",
+            sources=selected.toList(),
+            selectionStartMs=0,
+            selectionEndMs=replayTrack.frames*1000/replayTrack.rate
+          )
+        }else{
+          view.copy(message=if(t.complete)"Take captured locally" else "Incomplete take: ${t.reason}")
+        }
+      }
+    }.onFailure{changed{v->v.copy(message="Recording finalization failed")}}}
     recording=null;activeMask=0
     changed{it.copy(playing=false,recording=false,phase="Ready",takes=store?.list()?:it.takes)}
   }
