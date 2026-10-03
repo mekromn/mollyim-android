@@ -2,13 +2,17 @@
 package org.thoughtcrime.securesms.webrtc.audio.mock
 
 import android.Manifest
+import android.graphics.Color
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.media.AudioManager
+import android.os.Build
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
+import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.ViewModel
@@ -17,6 +21,7 @@ import org.signal.core.ui.compose.theme.SignalTheme
 import org.thoughtcrime.securesms.PassphraseRequiredActivity
 import org.thoughtcrime.securesms.R
 import org.thoughtcrime.securesms.components.webrtc.v2.MockCallScreen
+import org.thoughtcrime.securesms.util.WindowUtil
 import org.thoughtcrime.securesms.util.viewModel
 
 class MockCallLabViewModel(val controller:MockCallLabController?):ViewModel(){
@@ -46,6 +51,16 @@ class MockCallLabActivity:PassphraseRequiredActivity(){
   }
   override fun onCreate(savedInstanceState:Bundle?,ready:Boolean){
     super.onCreate(savedInstanceState,ready)
+    WindowUtil.clearTranslucentNavigationBar(window)
+    WindowUtil.clearTranslucentStatusBar(window)
+    enableEdgeToEdge(
+      statusBarStyle=SystemBarStyle.dark(Color.TRANSPARENT),
+      navigationBarStyle=SystemBarStyle.dark(Color.TRANSPARENT)
+    )
+    if(Build.VERSION.SDK_INT>=29){
+      window.isNavigationBarContrastEnforced = false
+      window.isStatusBarContrastEnforced = false
+    }
     volumeControlStream=AudioManager.STREAM_VOICE_CALL
     val controller=model.controller
     if(controller==null){toast("A real call or another local test owns the audio resources");finish();return}
