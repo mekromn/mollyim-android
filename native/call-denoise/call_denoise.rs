@@ -13,7 +13,7 @@ unsafe extern "C" {
     fn Rust_MollyCallDenoiseEnd(owner:u64) -> i32;
     fn Rust_MollyCallDenoiseGate(owner:u64,allowed:i32,reason:i32) -> i32;
     fn Rust_MollyCallDenoiseInvalidate(owner:u64,reason:i32) -> i32;
-    fn Rust_MollyCallDenoisePaths(library:*const c_char,library_len:usize,standard:*const c_char,standard_len:usize,low_latency:*const c_char,low_latency_len:usize) -> i32;
+    fn Rust_MollyCallDenoisePaths(library:*const c_char,library_len:usize,standard:*const c_char,standard_len:usize,low_latency:*const c_char,low_latency_len:usize,mobile_fused:*const c_char,mobile_fused_len:usize) -> i32;
     fn Rust_MollyCallDenoiseConfigure(direction:i32,enabled:i32,model:i32,attenuation:f32,post_filter:i32,beta:f32,minimum:f32,erb:f32,df:f32) -> i32;
     fn Rust_MollyCallDenoiseBypass(direction:i32,bypass:i32);
     fn Rust_MollyCallDenoiseRetry(direction:i32);
@@ -42,12 +42,13 @@ pub extern "C" fn Java_org_thoughtcrime_securesms_webrtc_audio_CallDenoiseBridge
 #[unsafe(no_mangle)] #[allow(non_snake_case)]
 pub extern "C" fn Java_org_thoughtcrime_securesms_webrtc_audio_CallDenoiseBridge_nativeRetry(_e:EnvUnowned,_c:JClass,d:jint){unsafe{Rust_MollyCallDenoiseRetry(d)}}
 #[unsafe(no_mangle)] #[allow(non_snake_case)]
-pub unsafe extern "C" fn Java_org_thoughtcrime_securesms_webrtc_audio_CallDenoiseBridge_nativePaths(mut e:EnvUnowned,_c:JClass,library:JString,standard:JString,low_latency:JString)->jboolean{
+pub unsafe extern "C" fn Java_org_thoughtcrime_securesms_webrtc_audio_CallDenoiseBridge_nativePaths(mut e:EnvUnowned,_c:JClass,library:JString,standard:JString,low_latency:JString,mobile_fused:JString)->jboolean{
     e.with_env(|env|->Result<jboolean>{
         let library=CString::new(library.try_to_string(env)?)?;
         let standard=CString::new(standard.try_to_string(env)?)?;
         let low_latency=CString::new(low_latency.try_to_string(env)?)?;
-        Ok((unsafe{Rust_MollyCallDenoisePaths(library.as_ptr(),library.as_bytes().len(),standard.as_ptr(),standard.as_bytes().len(),low_latency.as_ptr(),low_latency.as_bytes().len())}!=0) as jboolean)
+        let mobile_fused=CString::new(mobile_fused.try_to_string(env)?)?;
+        Ok((unsafe{Rust_MollyCallDenoisePaths(library.as_ptr(),library.as_bytes().len(),standard.as_ptr(),standard.as_bytes().len(),low_latency.as_ptr(),low_latency.as_bytes().len(),mobile_fused.as_ptr(),mobile_fused.as_bytes().len())}!=0) as jboolean)
     }).resolve::<ThrowCallException>()
 }
 #[unsafe(no_mangle)] #[allow(non_snake_case)]
