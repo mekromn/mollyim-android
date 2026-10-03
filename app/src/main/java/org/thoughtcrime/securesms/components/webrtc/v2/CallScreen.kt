@@ -17,6 +17,7 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -82,6 +83,8 @@ import org.thoughtcrime.securesms.recipients.RecipientId
 import org.thoughtcrime.securesms.ringrtc.CameraState
 import org.thoughtcrime.securesms.service.webrtc.PendingParticipantCollection
 import org.thoughtcrime.securesms.util.RemoteConfig
+import org.thoughtcrime.securesms.webrtc.audio.CallAudioSession
+import org.thoughtcrime.securesms.webrtc.audio.ProductionCallAudioSession
 import kotlin.math.max
 import kotlin.math.round
 import kotlin.time.Duration.Companion.milliseconds
@@ -112,6 +115,9 @@ fun CallScreen(
     callControlsState = callControlsState,
     callControlsListener = CallScreenControlsListener.Empty
   ),
+  callAudioSession: CallAudioSession = ProductionCallAudioSession,
+  callAudioStatsHeader: @Composable () -> Unit = {},
+  callScreenOverlay: @Composable BoxScope.() -> Unit = {},
   callScreenControlsListener: CallScreenControlsListener = CallScreenControlsListener.Empty,
   callScreenSheetDisplayListener: CallScreenSheetDisplayListener = CallScreenSheetDisplayListener.Empty,
   additionalActionsListener: AdditionalActionsListener = AdditionalActionsListener.Empty,
@@ -255,6 +261,8 @@ fun CallScreen(
               displayVideoTooltip = callScreenState.displayVideoTooltip,
               additionalActionsState = additionalActionsState,
               audioOutputPickerController = callScreenController.audioOutputPickerController,
+              callAudioSession = callAudioSession,
+              callAudioStatsHeader = callAudioStatsHeader,
               modifier = Modifier
                 .fillMaxWidth()
                 .alpha(callControlsAlpha)
@@ -492,6 +500,7 @@ fun CallScreen(
         )
       }
     }
+    callScreenOverlay()
   }
 
   if (callScreenState.isParticipantUpdatePopupEnabled) {
