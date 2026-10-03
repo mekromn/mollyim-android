@@ -18,9 +18,44 @@ def patch_group_factories(text: str) -> str:
  return text.replace(before, after)
 
 
+def patch_factory_lifetime(web: Path) -> None:
+    """The pinned factory is lazy: only MediaEngineReference invokes Init.
+
+    A local factory has no PeerConnection to own this reference. Keep a separate
+    lifetime reference, never abuse AEC dump or create a fake network call.
+    Both construction and release execute on the factory's worker thread.
+    """
+    header = web / 'pc/peer_connection_factory.h'
+    source = web / 'pc/peer_connection_factory.cc'
+    once(header,
+         '  // While AEC dump is ongoing, we retain a reference to the media engine.',
+         '  // The local call owns media initialization without a PeerConnection.\n'
+         '  std::unique_ptr<ConnectionContext::MediaEngineReference> molly_mock_media_engine_ref_\n'
+         '      RTC_GUARDED_BY(worker_thread());\n'
+         '  // While AEC dump is ongoing, we retain a reference to the media engine.')
+    once(source, '#include "pc/peer_connection_factory.h"',
+         '#include "pc/peer_connection_factory.h"\n#include "audio/molly_mock/registry.h"')
+    once(source,
+         '      encode_metronome_(std::move(dependencies->encode_metronome)) {}',
+         '      encode_metronome_(std::move(dependencies->encode_metronome)) {\n'
+         '  if (molly_mock::AcquireConstructionSession()) {\n'
+         '    worker_thread()->BlockingCall([this] {\n'
+         '      RTC_DCHECK_RUN_ON(worker_thread());\n'
+         '      molly_mock_media_engine_ref_ =\n'
+         '          std::make_unique<ConnectionContext::MediaEngineReference>(context_);\n'
+         '    });\n'
+         '  }\n'
+         '}')
+    once(source, '    StopAecDump();\n  });',
+         '    StopAecDump();\n    molly_mock_media_engine_ref_ = nullptr;\n  });')
+    once(web / 'pc/BUILD.gn',
+         '    "peer_connection_factory.h",\n  ]\n  deps = [',
+         '    "peer_connection_factory.h",\n  ]\n  deps = [\n    "../audio",')
+
 def patch(ring:Path,root:Path=ROOT):
  web=ring/'src/webrtc/src';source=web/'audio/audio_transport_impl.cc';header=web/'audio/audio_transport_impl.h'
  if 'MOLLY_MOCK_CALL_EXPORTS' not in source.read_text():base.patch(ring,root)
+ patch_factory_lifetime(web)
  # Refresh only owned source files; upstream edits below have unique anchors.
  for folder,target in [('incoming-audio','molly_incoming'),('call-denoise','molly_denoise'),('mock-call','molly_mock')]:
   dst=web/'audio'/target;dst.mkdir(exist_ok=True)
