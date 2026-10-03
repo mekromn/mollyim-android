@@ -23,6 +23,7 @@ import org.thoughtcrime.securesms.recipients.Recipient
 import org.thoughtcrime.securesms.recipients.RecipientId
 import org.thoughtcrime.securesms.webrtc.audio.Direction
 import org.thoughtcrime.securesms.webrtc.audio.mock.*
+import java.util.Locale
 
 /**
  * The lab now renders the production CallScreen and production CallControls.
@@ -140,15 +141,21 @@ fun MockCallScreen(
     callAudioStatsHeader = {
       LabStatsPanel(view, compact = true, onExpand = { diagnostics = true })
     },
-    callScreenOverlay = {
-      LabNativeOverlay(
+    callControlsExtraContent = {
+      LabTestTransportControls(
         view = view,
         controller = controller,
         onRecord = onRecord,
-        onDiagnostics = { diagnostics = true },
+        onDiagnostics = { diagnostics = true }
+      )
+    },
+    callScreenOverlay = {
+      LabNativeOverlay(
+        view = view,
         modifier = Modifier
           .align(Alignment.TopCenter)
-          .padding(top = 74.dp, start = 12.dp, end = 12.dp)
+          .statusBarsPadding()
+          .padding(top = 72.dp, start = 16.dp, end = 16.dp)
       )
     },
     callScreenControlsListener = controlsListener,
@@ -301,36 +308,88 @@ private fun LabRouteChoice.asWebRtcOutput(): WebRtcAudioOutput {
 @Composable
 private fun LabNativeOverlay(
   view: MockCallLabController.View,
-  controller: MockCallLabController,
-  onRecord: (LabMode) -> Unit,
-  onDiagnostics: () -> Unit,
   modifier: Modifier = Modifier
 ) {
   Surface(
-    modifier = modifier.fillMaxWidth(),
-    shape = MaterialTheme.shapes.large,
-    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
-    tonalElevation = 4.dp
+    modifier = modifier,
+    shape = MaterialTheme.shapes.extraLarge,
+    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.90f),
+    tonalElevation = 2.dp
   ) {
-    Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-      Row(verticalAlignment = Alignment.CenterVertically) {
-        Column(Modifier.weight(1f)) {
-          Text("LOCAL TEST — Nobody is connected", style = MaterialTheme.typography.labelLarge, modifier = Modifier.testTag("lab-local-only"))
-          Text("${view.actualRoute} · ${view.phase}", style = MaterialTheme.typography.bodySmall)
-        }
-        if (view.recording) Text("● RECORDING", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelLarge, modifier = Modifier.testTag("lab-recording"))
+    Row(
+      modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+      verticalAlignment = Alignment.CenterVertically,
+      horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+      Text(
+        "LOCAL TEST · no network call",
+        style = MaterialTheme.typography.labelLarge,
+        modifier = Modifier.testTag("lab-local-only")
+      )
+      if (view.recording) {
+        Text(
+          "● REC",
+          color = MaterialTheme.colorScheme.error,
+          style = MaterialTheme.typography.labelLarge,
+          modifier = Modifier.testTag("lab-recording")
+        )
       }
-      LabStatsPanel(view, compact = true, onExpand = onDiagnostics)
-      Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        Button(
-          enabled = !view.retired && !view.recording,
-          onClick = { onRecord(if (view.mode == LabMode.RECEIVED) LabMode.SENT else view.mode) }
-        ) { Text("Record") }
-        OutlinedButton(
-          enabled = !view.retired && !view.recording,
-          onClick = { if (view.playing) controller.pause() else controller.play() }
-        ) { Text(if (view.playing) "Stop" else "Play") }
-        TextButton(enabled = !view.retired, onClick = onDiagnostics) { Text("Stats") }
+    }
+  }
+}
+
+@Composable
+private fun LabTestTransportControls(
+  view: MockCallLabController.View,
+  controller: MockCallLabController,
+  onRecord: (LabMode) -> Unit,
+  onDiagnostics: () -> Unit
+) {
+  val canPlay = when (view.mode) {
+    LabMode.RECEIVED -> view.sources[Direction.RECEIVED.wireId] != null
+    LabMode.SENT -> view.sources[Direction.SENT.wireId] != null
+    LabMode.BOTH -> view.sources[Direction.RECEIVED.wireId] != null && view.sources[Direction.SENT.wireId] != null
+  }
+  val receivedP95 = if (view.playing && view.stats.received.inferenceValid) {
+    String.format(Locale.ROOT, "%.1f", view.stats.received.p95Ms)
+  } else {
+    "—"
+  }
+  val sentP95 = if (view.playing && view.stats.sent.inferenceValid) {
+    String.format(Locale.ROOT, "%.1f", view.stats.sent.p95Ms)
+  } else {
+    "—"
+  }
+  val misses = if (view.playing) view.stats.received.misses + view.stats.sent.misses else 0L
+
+  Column(
+    horizontalAlignment = Alignment.CenterHorizontally,
+    verticalArrangement = Arrangement.spacedBy(8.dp),
+    modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp)
+  ) {
+    Text(
+      "${view.actualRoute} · ${view.phase} · Rx p95 ${receivedP95} ms · Tx p95 ${sentP95} ms · misses $misses",
+      style = MaterialTheme.typography.labelSmall,
+      color = MaterialTheme.colorScheme.onSurfaceVariant
+    )
+    Row(
+      horizontalArrangement = Arrangement.spacedBy(10.dp),
+      verticalAlignment = Alignment.CenterVertically
+    ) {
+      Button(
+        enabled = !view.retired && !view.recording,
+        onClick = { onRecord(if (view.mode == LabMode.RECEIVED) LabMode.SENT else view.mode) }
+      ) {
+        Text(if (view.recording) "Recording" else "Record")
+      }
+      OutlinedButton(
+        enabled = !view.retired && !view.recording && canPlay,
+        onClick = { if (view.playing) controller.pause() else controller.play() }
+      ) {
+        Text(if (view.playing) "Stop" else "Play")
+      }
+      TextButton(enabled = !view.retired, onClick = onDiagnostics) {
+        Text("Stats")
       }
     }
   }
