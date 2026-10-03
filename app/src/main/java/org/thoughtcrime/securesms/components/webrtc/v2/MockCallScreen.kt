@@ -383,7 +383,7 @@ private fun LabTestTransportControls(
         Text(if (view.recording) "Recording" else "Record")
       }
       OutlinedButton(
-        enabled = !view.retired && !view.recording && canPlay,
+        enabled = !view.retired && (view.playing || canPlay),
         onClick = { if (view.playing) controller.pause() else controller.play() }
       ) {
         Text(if (view.playing) "Stop" else "Play")
