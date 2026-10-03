@@ -117,6 +117,7 @@ fun CallScreen(
   ),
   callAudioSession: CallAudioSession = ProductionCallAudioSession,
   callAudioStatsHeader: @Composable () -> Unit = {},
+  callControlsExtraContent: @Composable () -> Unit = {},
   callScreenOverlay: @Composable BoxScope.() -> Unit = {},
   callScreenControlsListener: CallScreenControlsListener = CallScreenControlsListener.Empty,
   callScreenSheetDisplayListener: CallScreenSheetDisplayListener = CallScreenSheetDisplayListener.Empty,
@@ -263,6 +264,7 @@ fun CallScreen(
               audioOutputPickerController = callScreenController.audioOutputPickerController,
               callAudioSession = callAudioSession,
               callAudioStatsHeader = callAudioStatsHeader,
+              callControlsExtraContent = callControlsExtraContent,
               modifier = Modifier
                 .fillMaxWidth()
                 .alpha(callControlsAlpha)
