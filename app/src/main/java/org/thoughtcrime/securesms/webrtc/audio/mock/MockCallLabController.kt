@@ -289,7 +289,118 @@ class MockCallLabController(
     recording=null;activeMask=0
     changed{it.copy(playing=false,recording=false,phase="Ready",takes=store?.list()?:it.takes)}
   }
-  fun setMode(mode:LabMode):CompletableFuture<Unit> = submit{pauseInternal();changed{it.copy(mode=mode,monitor=if(mode==LabMode.SENT)Monitor.SENT else Monitor.RECEIVED)}}
+
+  fun benchmark(direction:Direction):CompletableFuture<Unit> = submit {
+    check(benchmarkRun==null){"Benchmark is already running"}
+    check(!mutableView.value.recording){"Stop recording before benchmarking"}
+    val v=mutableView.value
+    val source=requireNotNull(v.sources[direction.wireId]){"Choose a ${if(direction==Direction.SENT)"Sent" else "Received"} replay source first"}
+    val end=(v.selectionEndMs.takeIf{it>v.selectionStartMs}?:source.durationMs).coerceAtMost(source.durationMs)
+    check(end-v.selectionStartMs>=3000){"Select at least 3 seconds of audio for a meaningful realtime benchmark"}
+    pauseInternal()
+    benchmarkRun=BenchmarkRun(
+      direction=direction,
+      savedConfiguration=configuration,
+      savedMode=v.mode,
+      savedMonitor=v.monitor,
+      savedStart=v.selectionStartMs,
+      savedEnd=end,
+      savedLoop=v.loop,
+      savedOriginal=v.original
+    )
+    beginBenchmarkPass()
+  }
+
+  fun useBenchmarkPick():CompletableFuture<Unit> = submit {
+    check(benchmarkRun==null){"Wait for the benchmark to finish"}
+    val b=mutableView.value.benchmark
+    val pick=requireNotNull(b.summary.realtimePick){"No stable realtime model was found"}
+    configuration=if(b.direction==Direction.RECEIVED){
+      configuration.copy(received=configuration.received.copy(model=pick))
+    }else{
+      configuration.copy(sent=configuration.sent.copy(model=pick))
+    }
+    publishConfiguration();applyLiveConfiguration()
+    changed{it.copy(message="Realtime speed pick selected for this lab. Use Apply to calls to save it.")}
+  }
+
+  private fun beginBenchmarkPass(){
+    val run=requireNotNull(benchmarkRun)
+    val model=run.models[run.index]
+    pauseInternal()
+    configuration=if(run.direction==Direction.RECEIVED){
+      run.savedConfiguration.copy(
+        received=run.savedConfiguration.received.copy(enabled=true,model=model),
+        sent=run.savedConfiguration.sent.copy(enabled=false)
+      )
+    }else{
+      run.savedConfiguration.copy(
+        received=run.savedConfiguration.received.copy(enabled=false),
+        sent=run.savedConfiguration.sent.copy(enabled=true,model=model)
+      )
+    }
+    publishConfiguration()
+    changed{it.copy(
+      mode=if(run.direction==Direction.RECEIVED)LabMode.RECEIVED else LabMode.SENT,
+      monitor=if(run.direction==Direction.RECEIVED)Monitor.RECEIVED else Monitor.SENT,
+      selectionStartMs=run.savedStart,selectionEndMs=run.savedEnd,loop=false,original=false,
+      benchmark=BenchmarkView(true,run.direction,model,run.index,run.models.size,DenoiseBenchmarkJudge.summarize(run.results)),
+      message="Benchmarking ${model.name.replace('_',' ')} through the real call path"
+    )}
+    run.fallbackOccurred=false;run.maxMisses=0
+    checkedStart(false)
+    run.startedAtMs=environment.nowMs()
+  }
+
+  private fun benchmarkPoll(s:LabStatsSnapshot):Boolean {
+    val run=benchmarkRun?:return false
+    val d=if(run.direction==Direction.RECEIVED)s.received else s.sent
+    run.fallbackOccurred=run.fallbackOccurred||d.state==5
+    run.maxMisses=maxOf(run.maxMisses,d.misses)
+    val elapsed=environment.nowMs()-run.startedAtMs
+    val enough=d.inferenceValid&&d.processed>=200
+    val timedOut=elapsed>=6000
+    if(!enough&&!s.finished&&!timedOut)return true
+
+    run.results+=DenoiseBenchmarkResult(
+      model=run.models[run.index],
+      meanMs=d.meanMs,
+      p95Ms=d.p95Ms,
+      misses=run.maxMisses,
+      processed=d.processed,
+      snr=d.snr,
+      fallbackOccurred=run.fallbackOccurred,
+      complete=enough
+    )
+    pauseInternal()
+    if(run.index+1<run.models.size){
+      ++run.index
+      beginBenchmarkPass()
+    }else{
+      finishBenchmark(cancelled=false,reason="")
+    }
+    return true
+  }
+
+  private fun finishBenchmark(cancelled:Boolean,reason:String){
+    val run=benchmarkRun?:return
+    if(mutableView.value.playing)pauseInternal()
+    configuration=run.savedConfiguration
+    publishConfiguration()
+    val summary=DenoiseBenchmarkJudge.summarize(run.results)
+    benchmarkRun=null
+    changed{it.copy(
+      mode=run.savedMode,monitor=run.savedMonitor,
+      selectionStartMs=run.savedStart,selectionEndMs=run.savedEnd,
+      loop=run.savedLoop,original=run.savedOriginal,
+      benchmark=BenchmarkView(false,run.direction,null,run.results.size,run.models.size,summary),
+      message=if(cancelled)reason else if(summary.realtimePick!=null)
+        "Benchmark complete. Realtime speed pick: ${summary.realtimePick.name.replace('_',' ')}"
+      else "Benchmark complete. No model met the stable realtime deadline."
+    )}
+  }
+
+  fun setMode(mode:LabMode):CompletableFuture<Unit> = submit{check(benchmarkRun==null){"Benchmark is running"};pauseInternal();changed{it.copy(mode=mode,monitor=if(mode==LabMode.SENT)Monitor.SENT else Monitor.RECEIVED)}}
   fun selectRoute(id:Int):CompletableFuture<Unit> = submit {
     val wasRecording=mutableView.value.recording;val wasPlaying=mutableView.value.playing
     pauseInternal();changed{it.copy(requestedRoute=id)}
