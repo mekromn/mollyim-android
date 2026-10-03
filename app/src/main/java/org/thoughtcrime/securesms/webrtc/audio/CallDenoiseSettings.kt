@@ -7,7 +7,8 @@ import kotlin.math.round
 enum class Direction(val wireId: Int) { RECEIVED(0), SENT(1) }
 enum class Model(val wireId: Int, val asset: String) {
   STANDARD(0, "DeepFilterNet3_onnx.tar.gz"),
-  LOW_LATENCY(1, "DeepFilterNet3_ll_onnx.tar.gz")
+  LOW_LATENCY(1, "DeepFilterNet3_ll_onnx.tar.gz"),
+  MOBILE_FUSED(2, "DeepFilterNet3_onnx_mobile.tar.gz")
 }
 enum class Preset { GENTLE, BALANCED, STRONG, CUSTOM }
 
