@@ -15,6 +15,17 @@ class EntryTests(unittest.TestCase):
    if end<0:end=len(s)
    section=s[start:end]
    self.assertIn('processCallStart(',section[:section.find('\n  public ',1) if '\n  public ' in section[1:] else len(section)],name)
+ def test_lab_uses_production_call_window_chrome(self):
+  manifest=(ROOT/'app/src/main/AndroidManifest.xml').read_text()
+  import re
+  m=re.search(r'<activity[^>]*MockCallLabActivity[^>]*/>',manifest,re.S)
+  self.assertIsNotNone(m)
+  self.assertIn('android:theme="@style/TextSecure.DarkTheme.WebRTCCall"',m[0])
+  activity=(APP/'webrtc/audio/mock/MockCallLabActivity.kt').read_text()
+  for required in ('enableEdgeToEdge(', 'WindowUtil.clearTranslucentNavigationBar', 'WindowUtil.clearTranslucentStatusBar',
+                   'window.isNavigationBarContrastEnforced = false', 'window.isStatusBarContrastEnforced = false'):
+   self.assertIn(required,activity)
+
  def test_local_router_never_unmutes_the_system_microphone(self):
   s=(APP/'webrtc/audio/SignalAudioManager.kt').read_text()
   self.assertTrue('if (localTestMode) return' in s)
