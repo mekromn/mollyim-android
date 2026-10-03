@@ -36,9 +36,7 @@ import android.content.Context
 object ContextCompat {fun checkSelfPermission(c:Context,p:String)=0}
 '''))
  files.append(write('Ring.kt','''package org.signal.ringrtc
-import android.content.Context
 class AudioConfig {var useOboe=false}
-class MockCallSession:AutoCloseable {fun configure(v:FloatArray)=1L;fun command(op:Int,a:Long,b:Long,c:Long,d:Long)=1L;fun load(d:Int,r:Int,c:Int,p:ShortArray)=1L;fun status(v:FloatArray)=true;fun drain(t:Int,m:LongArray,p:FloatArray)=0;fun revoke(){};override fun close(){};companion object {fun create(c:Context,a:AudioConfig)=MockCallSession()}}
 '''))
  files.append(write('Config.kt','''package org.thoughtcrime.securesms.service.webrtc
 object RingRtcDynamicConfiguration {fun getAudioConfig()=org.signal.ringrtc.AudioConfig()}
@@ -63,4 +61,4 @@ class SignalAudioManager {enum class AudioDevice {NONE};interface EventListener 
  result=subprocess.run(['kotlinc',*files,'-cp',str(coroutines),'-d',str(w/'glue.jar')],capture_output=True,text=True)
  if result.returncode:
   print(result.stdout+result.stderr);raise SystemExit(result.returncode)
- print('PASS complete production/lab session adapters, route, preemption and controller glue compilation (API fixtures, NOT device execution).')
+ print('PASS complete production/lab session adapters compile against stock RingRTC API without the lab-only MockCallSession class (API fixtures, NOT device execution).')
