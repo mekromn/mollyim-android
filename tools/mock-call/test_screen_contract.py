@@ -24,12 +24,24 @@ class ScreenContracts(unittest.TestCase):
   self.assertIn('callAudioSession: CallAudioSession = ProductionCallAudioSession',controls)
   self.assertIn('session = callAudioSession',controls)
   self.assertIn('statsHeader = callAudioStatsHeader',controls)
+  self.assertIn('callControlsExtraContent: @Composable () -> Unit = {}',controls)
+  self.assertIn('callControlsExtraContent()',controls)
 
   call_screen=(A/'components/webrtc/v2/CallScreen.kt').read_text()
   self.assertIn('callAudioSession: CallAudioSession = ProductionCallAudioSession',call_screen)
   self.assertIn('callScreenOverlay: @Composable BoxScope.() -> Unit = {}',call_screen)
+  self.assertIn('callControlsExtraContent: @Composable () -> Unit = {}',call_screen)
   self.assertIn('callAudioSession = callAudioSession',call_screen)
+  self.assertIn('callControlsExtraContent = callControlsExtraContent',call_screen)
   self.assertIn('callScreenOverlay()',call_screen)
+
+  mock=(A/'components/webrtc/v2/MockCallScreen.kt').read_text()
+  overlay=mock[mock.index('private fun LabNativeOverlay'):mock.index('@OptIn(ExperimentalLayoutApi::class)',mock.index('private fun LabNativeOverlay'))]
+  self.assertNotIn('LabStatsPanel(',overlay)
+  self.assertNotIn('Text("Record")',overlay)
+  self.assertNotIn('Text(if (view.playing) "Stop" else "Play")',overlay)
+  self.assertIn('callControlsExtraContent = {',mock)
+  self.assertIn('LabTestTransportControls(',mock)
 
  def test_echo_record_keeps_explicit_both_mode_across_permission(self):
   screen=(A/'components/webrtc/v2/MockCallScreen.kt').read_text()
