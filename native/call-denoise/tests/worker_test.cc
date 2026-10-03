@@ -131,9 +131,22 @@ void repeated_invalidate_without_frames(){
   for(int i=0;i<10000;++i)worker.Invalidate();
 }
 void invalid_native_config_is_rejected(){DenoiseControl c;DenoiseConfig e;e.enabled=true;e.parameters.beta=std::numeric_limits<float>::quiet_NaN();assert(!c.Update(Direction::Sent,e));e.parameters.beta=.02;e.parameters.df_snr=-20;assert(!c.Update(Direction::Sent,e));ControlSnapshot s;assert(c.Read(Direction::Sent,s)&&!s.config.enabled);}
-void overload_survives_unsupported_format(){Harness h;h.Enable();for(int n=0;n<12;++n)h.Step(n);for(int n=12;n<20;++n)h.Step(n,false);assert(h.receive.Status().state==EffectiveState::Overloaded);auto invalid=Packet(20);invalid.meta.channels=3;h.receive.Process(invalid,h.output);h.Step(21);assert(h.receive.Status().state==EffectiveState::Overloaded);}
+void unsupported_format_starts_clean_timing_epoch(){
+  Harness h;h.Enable();
+  for(int n=0;n<12;++n)h.Step(n);
+  for(int n=12;n<20;++n)h.Step(n,false);
+  assert(h.receive.Status().state==EffectiveState::Overloaded);
+  auto invalid=Packet(20);invalid.meta.channels=3;
+  auto invalid_result=h.receive.Process(invalid,h.output);
+  assert(invalid_result.state==EffectiveState::Unsupported);
+  auto first=h.Step(21);
+  assert(first.state==EffectiveState::Loading);
+  bool active=false;
+  for(int n=22;n<60;++n)if(h.Step(n).state==EffectiveState::Active){active=true;break;}
+  assert(active);
+}
 void processing_failure_keeps_aligned_ordinary_audio(){Harness h;h.Enable();for(int n=0;n<12;++n)h.Step(n);h.factory.fail_process=true;h.Step(12);for(int n=13;n<25;++n){auto r=h.Step(n);assert(r.state==EffectiveState::Unavailable);assert(h.output[0]==(100+n-5)/32768.f);}assert(h.factory.live==0);}
 int main(){std::cout.setf(std::ios::unitbuf);
 #define RUN(t) t();std::cout<<#t<<" PASS\n";
-RUN(defaults_and_off_identity);RUN(late_output_uses_matched_dry);RUN(three_misses_enter_safe_fallback_but_worker_recovers);RUN(overload_window_ignores_ineligible_slots_and_recovers_with_hysteresis);RUN(manual_bypass_suspends_inference_keeps_delay);RUN(zero_is_aligned_dry);RUN(settings_do_not_reset_stream);RUN(receive_failure_does_not_stop_send);RUN(model_switch_load_failure);RUN(rapid_switch_has_no_old_epoch);RUN(off_returns_direct_and_no_replay);RUN(config_atomic_and_direction_isolation);RUN(generation_invalidates_audio);RUN(stress_no_callback_allocation);RUN(invalidate_during_actual_load);RUN(repeated_invalidate_without_frames);RUN(invalid_native_config_is_rejected);RUN(overload_survives_unsupported_format);RUN(processing_failure_keeps_aligned_ordinary_audio);
+RUN(defaults_and_off_identity);RUN(late_output_uses_matched_dry);RUN(three_misses_enter_safe_fallback_but_worker_recovers);RUN(overload_window_ignores_ineligible_slots_and_recovers_with_hysteresis);RUN(manual_bypass_suspends_inference_keeps_delay);RUN(zero_is_aligned_dry);RUN(settings_do_not_reset_stream);RUN(receive_failure_does_not_stop_send);RUN(model_switch_load_failure);RUN(rapid_switch_has_no_old_epoch);RUN(off_returns_direct_and_no_replay);RUN(config_atomic_and_direction_isolation);RUN(generation_invalidates_audio);RUN(stress_no_callback_allocation);RUN(invalidate_during_actual_load);RUN(repeated_invalidate_without_frames);RUN(invalid_native_config_is_rejected);RUN(unsupported_format_starts_clean_timing_epoch);RUN(processing_failure_keeps_aligned_ordinary_audio);
 }
