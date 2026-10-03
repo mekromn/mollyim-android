@@ -14,14 +14,14 @@ MOLLY_DF_EXPORT int Rust_MollyCallDenoiseInvalidate(uint64_t owner,int reason){
   if(reason<0||reason>6)return 0;
   return molly_denoise::GlobalService().Invalidate(owner,static_cast<molly_denoise::GateReason>(reason));
 }
-MOLLY_DF_EXPORT int Rust_MollyCallDenoisePaths(const char* library,size_t library_length,const char* standard,size_t standard_length,const char* low_latency,size_t low_latency_length){
+MOLLY_DF_EXPORT int Rust_MollyCallDenoisePaths(const char* library,size_t library_length,const char* standard,size_t standard_length,const char* low_latency,size_t low_latency_length,const char* mobile_fused,size_t mobile_fused_length){
   // Rust supplies owned CString buffers and their checked byte lengths. Copy
   // them synchronously; no raw pointer is retained by the worker factory.
-  if(!library||!standard||!low_latency||!library_length||!standard_length||!low_latency_length||library_length>=4096||standard_length>=4096||low_latency_length>=4096)return 0;
-  return molly_denoise::GlobalFactory().SetPaths(std::string(library,library_length),{std::string(standard,standard_length),std::string(low_latency,low_latency_length)});
+  if(!library||!standard||!low_latency||!mobile_fused||!library_length||!standard_length||!low_latency_length||!mobile_fused_length||library_length>=4096||standard_length>=4096||low_latency_length>=4096||mobile_fused_length>=4096)return 0;
+  return molly_denoise::GlobalFactory().SetPaths(std::string(library,library_length),{std::string(standard,standard_length),std::string(low_latency,low_latency_length),std::string(mobile_fused,mobile_fused_length)});
 }
 MOLLY_DF_EXPORT int Rust_MollyCallDenoiseConfigure(int direction,int enabled,int model,float attenuation,int post_filter,float beta,float minimum,float erb,float df){
-  if(direction<0||direction>1||model<0||model>1||(enabled!=0&&enabled!=1)||(post_filter!=0&&post_filter!=1))return 0;
+  if(direction<0||direction>1||model<0||model>2||(enabled!=0&&enabled!=1)||(post_filter!=0&&post_filter!=1))return 0;
   molly_denoise::DenoiseConfig c;c.enabled=enabled!=0;c.model=static_cast<molly_denoise::Model>(model);
   c.parameters={1,attenuation,static_cast<uint32_t>(post_filter),beta,minimum,erb,df,0};
   return molly_denoise::GlobalService().Controls().Update(static_cast<molly_denoise::Direction>(direction),c);
