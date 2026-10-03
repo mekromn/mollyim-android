@@ -402,6 +402,7 @@ class MockCallLabController(
 
   fun setMode(mode:LabMode):CompletableFuture<Unit> = submit{check(benchmarkRun==null){"Benchmark is running"};pauseInternal();changed{it.copy(mode=mode,monitor=if(mode==LabMode.SENT)Monitor.SENT else Monitor.RECEIVED)}}
   fun selectRoute(id:Int):CompletableFuture<Unit> = submit {
+    check(benchmarkRun==null){"Stop the benchmark before changing routes"}
     val wasRecording=mutableView.value.recording;val wasPlaying=mutableView.value.playing
     pauseInternal();changed{it.copy(requestedRoute=id)}
     if(wasRecording)checkedStart(true)
@@ -451,9 +452,13 @@ class MockCallLabController(
   }
   fun freezeStats(value:Boolean):CompletableFuture<Unit> = submit{stats.freeze(value);changed{it.copy(frozen=value,stats=stats.display())}}
   fun resetStats():CompletableFuture<Unit> = submit{stats.reset();changed{it.copy(message="Display window reset; native overload and session faults retained")}}
-  fun applyToCalls(sections:Set<LabSection>):CompletableFuture<ApplyResult> = submit{environment.apply(configuration,sections).also{result->changed{it.copy(message=if(result.applied)"Selected settings applied to calls" else result.reason)}}}
+  fun applyToCalls(sections:Set<LabSection>):CompletableFuture<ApplyResult> = submit{
+    check(benchmarkRun==null){"Wait for the benchmark to finish"}
+    environment.apply(configuration,sections).also{result->changed{it.copy(message=if(result.applied)"Selected settings applied to calls" else result.reason)}}
+  }
 
   override fun updateDenoise(direction:Direction,settings:DenoiseSettings){submit{
+    if(benchmarkRun!=null){changed{it.copy(message="Stop the benchmark before editing denoise settings")};return@submit}
     val s=settings.sanitized();configuration=if(direction==Direction.RECEIVED)configuration.copy(received=s)else configuration.copy(sent=s)
     publishConfiguration();applyLiveConfiguration()
   }}
@@ -514,6 +519,7 @@ class MockCallLabController(
         }
       }
       drain(h)
+      if(benchmarkRun!=null&&benchmarkPoll(s))return
       if(s.incomplete||s.dropped>0)recording?.incomplete("Native recording queue lost blocks")
       if(s.endpointState==5){fail("Native audio error ${s.error}");return}
       if(s.finished||v.recording&&environment.nowMs()-recordingStartedAt>=120000){
@@ -545,6 +551,7 @@ class MockCallLabController(
   }
   /** May run on a real-call control thread: no queue, writer or model wait. */
   fun preempt():CompletionStage<Void> {
+    benchmarkRun=null
     retired.set(true);captureAllowed.set(false)
     val future=lifetime?.revoke()?:CompletableFuture.completedFuture<Void>(null)
     changed{it.copy(retired=true,playing=false,recording=false,phase="Ended",message="Local test stopped; real call has priority")}
