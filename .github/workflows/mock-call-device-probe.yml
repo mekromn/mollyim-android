@@ -1,0 +1,58 @@
+name: Mock call actual Android capture probe
+on:
+  push:
+    branches: [feature/mock-call-lab]
+    paths: ['tools/mock-call/probe/**', '.github/workflows/mock-call-device-probe.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  actual-adm:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: actions/download-artifact@v4
+        with:
+          name: molly-mock-native-arm64
+          run-id: 37086942637
+          github-token: ${{ github.token }}
+          path: out/native
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+      - name: Build separate CI probe with exact shipped native AAR
+        run: |
+          sdkmanager 'build-tools;36.0.0' 'platforms;android-35' 'emulator' 'system-images;android-35;google_apis;x86_64'
+          bash tools/mock-call/probe/build.sh
+      - name: Boot framework emulator and exercise real ADM capture
+        run: |
+          set -euo pipefail
+          mkdir -p out/device-probe-reports
+          sudo chmod 666 /dev/kvm
+          echo no | avdmanager create avd --force -n mockprobe -k 'system-images;android-35;google_apis;x86_64' -d pixel_6
+          "$ANDROID_HOME/emulator/emulator" -avd mockprobe -no-window -no-boot-anim -no-snapshot -gpu swiftshader_indirect -no-audio > out/device-probe-reports/emulator.log 2>&1 &
+          timeout 600 bash -c 'until adb shell getprop sys.boot_completed 2>/dev/null | grep -q 1; do sleep 3; done'
+          adb shell getprop ro.product.cpu.abilist | tee out/device-probe-reports/abis.txt
+          adb shell input keyevent 82
+          adb install --abi arm64-v8a -r out/device-probe/probe.apk
+          adb shell pm grant com.mekromn.mollymockprobe android.permission.RECORD_AUDIO
+          adb logcat -c
+          adb shell am start -n com.mekromn.mollymockprobe/.ProbeActivity
+          for i in $(seq 1 60); do
+            adb shell run-as com.mekromn.mollymockprobe cat files/result.txt > out/device-probe-reports/result.txt 2>/dev/null && break
+            sleep 2
+          done
+          adb logcat -d > out/device-probe-reports/logcat.txt
+          grep -q ALL_BACKENDS_PASS out/device-probe-reports/result.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: actual-android-capture-evidence
+          path: out/device-probe-reports/
+          if-no-files-found: warn
