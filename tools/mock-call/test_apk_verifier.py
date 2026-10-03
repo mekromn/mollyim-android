@@ -8,9 +8,9 @@ except ImportError:
 class PackageTests(unittest.TestCase):
  def test_update_identity(self):
   self.assertIsNotNone(badging,'Mock APK verifier is missing')
-  text="package: name='com.mekromn.mollyaudio' versionCode='171907' versionName='8.19.2-4'\nminSdkVersion: '27'\ntargetSdkVersion: '35'\nnative-code: 'arm64-v8a'\n"
-  self.assertEqual(badging(text)['version_code'],171907)
-  for wrong in [text.replace('171907','171906'),text.replace('mollyaudio','other'),text+'application-debuggable\n',text.replace("'arm64-v8a'","'arm64-v8a' 'x86'"),text.replace("'27'","'26'")]:
+  text="package: name='com.mekromn.mollyaudio' versionCode='171908' versionName='8.19.2-4'\nminSdkVersion: '27'\ntargetSdkVersion: '35'\nnative-code: 'arm64-v8a'\n"
+  self.assertEqual(badging(text)['version_code'],171908)
+  for wrong in [text.replace('171908','171907'),text.replace('mollyaudio','other'),text+'application-debuggable\n',text.replace("'arm64-v8a'","'arm64-v8a' 'x86'"),text.replace("'27'","'26'")]:
    with self.assertRaises(ValueError):badging(wrong)
  def test_private_activity(self):
   self.assertIsNotNone(manifest)
