@@ -14,7 +14,7 @@ MOCK_JNI={'Lorg/signal/ringrtc/MockCallSession;':{
 
 def badging(text):
  match=re.search(r"package: name='([^']+)' versionCode='([0-9]+)' versionName='([^']*)'",text)
- if not match or match[1]!=df.PACKAGE or int(match[2])!=171907:raise ValueError('Wrong mock update identity')
+ if not match or match[1]!=df.PACKAGE or int(match[2])!=171908:raise ValueError('Wrong mock update identity')
  if 'application-debuggable' in text:raise ValueError('A debug APK is not the deliverable')
  for label,value in [('(?:minSdkVersion|sdkVersion)',27),('targetSdkVersion',35)]:
   if not re.search(r'^'+label+r":\s*'"+str(value)+r"'\s*$",text,re.M):raise ValueError('SDK contract changed')
