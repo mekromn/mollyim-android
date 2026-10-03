@@ -43,7 +43,7 @@ template<class T> class AtomicSnapshot {
   std::array<std::atomic<uint64_t>,kWords> words_{};
 };
 enum class Direction:uint32_t {Received=0,Sent=1};
-enum class Model:uint32_t {Standard=0,LowLatency=1};
+enum class Model:uint32_t {Standard=0,LowLatency=1,MobileFused=2};
 struct DenoiseConfig {
   bool enabled=false;
   Model model=Model::Standard;
