@@ -13,42 +13,58 @@ permissions:
 jobs:
   packaged-runtime:
     runs-on: ubuntu-24.04
-    timeout-minutes: 25
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
-      - name: Establish exact successful compilation and original verifier failure
+      - name: Establish exact repaired app build
         env:
           GH_TOKEN: ${{ github.token }}
+          APP_RUN: '37136793888'
+          APP_SOURCE: 'fd020c11b4ef25cf1cf75d079ec9d8879e98696c'
         run: |
+          set -euo pipefail
           mkdir -p out/mock-runtime-proof
+          for n in $(seq 1 180); do
+            gh api "repos/mekromn/mollyim-android/actions/runs/$APP_RUN" > out/mock-runtime-proof/app-run.json
+            status=$(python3 -c 'import json;print(json.load(open("out/mock-runtime-proof/app-run.json"))["status"])')
+            if [ "$status" = completed ]; then break; fi
+            sleep 10
+          done
           python3 - <<'PY'
-          import json,subprocess
+          import json,os,subprocess
           from pathlib import Path
-          base='repos/mekromn/mollyim-android/actions/runs/37099403894'
-          run=json.loads(subprocess.check_output(['gh','api',base]))
-          assert run['head_sha']=='ef56e0b7967c8cb7515717b3bc43760b88808813'
-          assert run['status']=='completed' and run['conclusion']=='failure'
-          jobs=json.loads(subprocess.check_output(['gh','api',base+'/jobs']))['jobs']
-          app=next(j for j in jobs if j['name']=='apk')
-          steps={s['name']:s['conclusion'] for s in app['steps']}
-          assert steps['Compile, lint and assemble actual optimized Android app']=='success'
-          assert steps['Verify compiled APK and local-only entry']=='failure'
-          artifacts=json.loads(subprocess.check_output(['gh','api',base+'/artifacts']))['artifacts']
-          a=next(x for x in artifacts if x['id']==11265996400)
-          assert a['name']=='mock-call-incomplete-packaging-diagnostics' and not a['expired']
-          assert a['digest']=='sha256:d51c443e877f8d802bcc3b0f84208d492e994be50c4b965a168abecab5d65aec'
-          Path('out/mock-runtime-proof/build-origin.json').write_text(json.dumps({'artifact':a,'build_steps':steps,'compiled_source':run['head_sha']},indent=2))
+          run=json.loads(Path('out/mock-runtime-proof/app-run.json').read_text())
+          assert run['id']==int(os.environ['APP_RUN'])
+          assert run['head_sha']==os.environ['APP_SOURCE']
+          assert run['status']=='completed' and run['conclusion']=='success'
+          jobs=json.loads(subprocess.check_output(['gh','api',f"repos/mekromn/mollyim-android/actions/runs/{run['id']}/jobs"]))['jobs']
+          steps={j['name']:{s['name']:s['conclusion'] for s in (j.get('steps') or [])} for j in jobs}
+          assert next(j for j in jobs if j['name']=='source-check')['conclusion']=='success'
+          apk=next(j for j in jobs if j['name']=='apk')
+          assert apk['conclusion']=='success'
+          assert steps['apk']['Compile, lint and assemble actual optimized Android app']=='success'
+          assert steps['apk']['Verify compiled APK and local-only entry']=='success'
+          arts=json.loads(subprocess.check_output(['gh','api',f"repos/mekromn/mollyim-android/actions/runs/{run['id']}/artifacts"]))['artifacts']
+          names={a['name'] for a in arts}
+          assert {'molly-mock-call-lab-unsigned','molly-mock-sdk-tools','mock-call-app-build-reports'}<=names
+          Path('out/mock-runtime-proof/build-origin.json').write_text(json.dumps({'run':run['id'],'head_sha':run['head_sha'],'artifacts':arts,'steps':steps},indent=2))
           PY
       - uses: actions/download-artifact@v4
         with:
-          name: mock-call-incomplete-packaging-diagnostics
-          run-id: 37099403894
+          name: molly-mock-call-lab-unsigned
+          run-id: 37136793888
           github-token: ${{ github.token }}
           path: out/compiled
       - uses: actions/download-artifact@v4
         with:
+          name: molly-mock-sdk-tools
+          run-id: 37136793888
+          github-token: ${{ github.token }}
+          path: out/sdk
+      - uses: actions/download-artifact@v4
+        with:
           name: molly-mock-native-arm64
-          run-id: 37086942637
+          run-id: 37104079175
           github-token: ${{ github.token }}
           path: out/native
       - uses: actions/download-artifact@v4
@@ -57,23 +73,25 @@ jobs:
           run-id: 36929152476
           github-token: ${{ github.token }}
           path: out/reference
-      - name: Re-run full package checks with the actual SDK36 boolean syntax
+      - name: Re-run full package checks against repaired native engine
         run: |
+          set -euo pipefail
           set -o pipefail
-          export LD_LIBRARY_PATH="$PWD/out/compiled/mock-sdk/lib64"
-          chmod +x out/compiled/mock-sdk/aapt2 out/compiled/mock-sdk/dexdump out/compiled/mock-sdk/zipalign
+          apk=$(find out/compiled -type f -name '*.apk' -print -quit)
+          test -n "$apk"
+          export LD_LIBRARY_PATH="$PWD/out/sdk/lib64"
+          chmod +x out/sdk/aapt2 out/sdk/dexdump out/sdk/zipalign
           python3 - <<'PY'
-          import hashlib,json,sys
+          import json,sys
           from pathlib import Path
           sys.path.insert(0,'tools/deepfilter')
           from verify_release import verify_inputs
           verify_inputs(Path('.'),json.loads(Path('out/native/native-inputs.json').read_text()))
-          p=Path('out/compiled/mock-apk/Molly-Audio-Mock-Call-Lab-arm64-unsigned.apk')
-          assert hashlib.sha256(p.read_bytes()).hexdigest()=='ba488dd2ae1769c03e53086963fb3476b3a4fb377f34467986d01db4dc634a38'
           PY
           python3 tools/mock-call/test_apk_verifier.py 2>&1 | tee out/mock-runtime-proof/verifier-tests.log
-          python3 tools/mock-call/verify_apk.py --apk out/compiled/mock-apk/Molly-Audio-Mock-Call-Lab-arm64-unsigned.apk --aar out/native/ringrtc-mock-arm64.aar --sdk out/compiled/mock-sdk > out/mock-runtime-proof/apk-verification.json
-          out/compiled/mock-sdk/zipalign -c -P 16 4 out/compiled/mock-apk/Molly-Audio-Mock-Call-Lab-arm64-unsigned.apk
+          python3 tools/mock-call/verify_apk.py --apk "$apk" --aar out/native/ringrtc-mock-arm64.aar --sdk out/sdk > out/mock-runtime-proof/apk-verification.json
+          out/sdk/zipalign -c -P 16 4 "$apk"
+          sha256sum "$apk" > out/mock-runtime-proof/input-apk.sha256
       - uses: android-actions/setup-android@v3
         with:
           packages: platform-tools
@@ -84,22 +102,22 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y qemu-user e2fsprogs
           sdkmanager 'ndk;28.0.13004108'
-      - name: Execute the exact APK's two real models with Android Bionic
+      - name: Execute exact APK models with Android Bionic
         run: |
+          set -euo pipefail
           set -o pipefail
-          apk=out/compiled/mock-apk/Molly-Audio-Mock-Call-Lab-arm64-unsigned.apk
-          sha256sum "$apk" > out/mock-runtime-proof/input-apk.sha256
+          apk=$(find out/compiled -type f -name '*.apk' -print -quit)
           bash tools/deepfilter/qemu_runtime.sh "$apk" out/reference 2>&1 | tee out/mock-runtime-proof/execution.log
           printf '%s\n' 'Android ARM64 ELF inference with Bionic under QEMU user mode. NOT Android UI, physical microphone routing, or a live-call test.' > out/mock-runtime-proof/test-boundaries.txt
       - uses: actions/upload-artifact@v4
         with:
-          name: molly-mock-call-lab-verified-unsigned
-          path: out/compiled/mock-apk/
+          name: molly-mock-call-lab-171908-verified-unsigned
+          path: out/compiled/
           if-no-files-found: error
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: mock-call-packaged-runtime-proof
+          name: mock-call-171908-packaged-runtime-proof
           path: |
             out/mock-runtime-proof/
             out/arm64-execution/*.json
