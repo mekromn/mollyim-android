@@ -62,6 +62,9 @@ fun main(){
   engine.queued=2;engine.sourceStart=0
   c.pause().get()
   check(c.view.value.takes.any{it.label.endsWith("microphone take")&&it.complete&&it.tracks.any{track->track.frames==160L}}) {"Stopping must finalize current-epoch accepted samples as complete"}
+  val replay=c.view.value.sources[Direction.SENT.wireId]
+  check(replay!=null && replay.track.tap==1 && replay.track.frames==160L) {"A completed microphone take must become the Sent replay source immediately"}
+  check(c.view.value.selectionStartMs==0L && c.view.value.selectionEndMs==20L) {"Auto-selected replay must expose its whole recorded interval"}
   c.applyToCalls(setOf(LabSection.SENT_DENOISE)).get();check(applies==1)
   allowed.set(false);c.preempt().toCompletableFuture().get();check(engine.revoked)
   check(runCatching{c.record().get()}.isFailure);check(engine.microphoneStarts==1)
