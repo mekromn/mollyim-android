@@ -52,6 +52,7 @@ jobs:
           CXX=clang++ MOCK_STRICT=1 python3 tools/mock-call/test_endpoint_api.py 2>&1 | tee out/mock-reports/strict.log
           python3 tools/mock-call/test_patch.py 2>&1 | tee out/mock-reports/patch.log
           bash tools/incoming-audio/test_host.sh 2>&1 | tee out/mock-reports/incoming.log
+          DEEPFILTER_HOST_OUT=out/denoise-host bash tools/deepfilter/test_host.sh worker 2>&1 | tee out/mock-reports/denoise-worker.log
           python3 tools/amoled/test_theme.py 2>&1 | tee out/mock-reports/theme.log
           git diff --check
       - uses: actions/upload-artifact@v4
