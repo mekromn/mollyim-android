@@ -18,7 +18,7 @@ void operator delete(void* p,std::size_t) noexcept {std::free(p);}
 struct FakeFactory final:EngineFactory {
   struct Engine final:StreamingEngine {
     FakeFactory& f; DfMeta meta;std::array<float,1440> delay{};size_t pos=0;
-    Engine(FakeFactory& f,uint32_t model):f(f),meta{1,48000,480,960,model==1?0u:2u,5,model==1?480u:1440u}{++f.live;f.max_live=std::max(f.max_live,f.live);}
+    Engine(FakeFactory& f,uint32_t model):f(f),meta{1,48000,480,960,model==0?2u:0u,5,model==0?1440u:480u}{++f.live;f.max_live=std::max(f.max_live,f.live);}
     ~Engine() override{--f.live;}
     DfMeta Metadata() const noexcept override{return meta;}
     bool Configure(const DfConfig& c) noexcept override{f.last=c;++f.configured;return true;}
@@ -88,12 +88,12 @@ void overload_window_ignores_ineligible_slots_and_recovers_with_hysteresis(){
 void manual_bypass_suspends_inference_keeps_delay(){Harness h;h.Enable();for(int n=0;n<12;++n)h.Step(n);h.control.Bypass(Direction::Received,true);h.Step(12);int count=h.factory.processed;for(int n=13;n<24;++n){auto r=h.Step(n);assert(r.kind==OutputKind::DelayedDry);assert(r.source.source_start==(n-5)*480);assert(h.output[0]==(100+n-5)/32768.f);}assert(count==h.factory.processed);h.control.Bypass(Direction::Received,false);for(int n=24;n<36;++n)h.Step(n);assert(h.factory.processed>count);}
 void zero_is_aligned_dry(){Harness h;h.Enable();for(int n=0;n<12;++n)h.Step(n);DenoiseConfig c;c.enabled=true;c.parameters.attenuation_db=0;h.control.Update(Direction::Received,c);h.Step(12);int count=h.factory.processed;for(int n=13;n<24;++n)h.Step(n);assert(h.factory.processed==count);assert(h.output[0]==118/32768.f);}
 void settings_do_not_reset_stream(){Harness h;h.Enable();for(int n=0;n<12;++n)h.Step(n);auto creations=h.factory.created;DenoiseConfig c;c.enabled=true;c.parameters.attenuation_db=12;h.control.Update(Direction::Received,c);for(int n=12;n<17;++n)h.Step(n);assert(h.factory.created==creations);assert(h.factory.last.attenuation_db==12);}
-void mobile_fused_model_uses_standard_delay_contract(){
-  Harness h;h.Enable(static_cast<Model>(2));
+void mobile_fused_model_uses_pinned_zero_lookahead_contract(){
+  Harness h;h.Enable(Model::MobileFused);
   for(int n=0;n<40;++n)h.Step(n);
   const auto status=h.receive.Status();
   assert(status.state==EffectiveState::Active);
-  assert(status.delay_samples==2400);
+  assert(status.delay_samples==1440);
   assert(h.factory.created==1);
 }
 void receive_failure_does_not_stop_send(){DenoiseControl c;FakeFactory fr,fs;DirectionProcessor r(c,Direction::Received,fr,false),s(c,Direction::Sent,fs,false);DenoiseConfig e;e.enabled=true;c.Update(Direction::Received,e);c.Update(Direction::Sent,e);fr.fail_load=true;std::array<float,kMaxSamples> out{};for(int n=0;n<20;++n){r.Process(Packet(n),out);r.PumpForTest();s.Process(Packet(n),out);s.PumpForTest();}assert(r.Status().state==EffectiveState::Unavailable);assert(s.Status().state==EffectiveState::Active);assert(fr.created==1);assert(fs.processed>5);}
@@ -156,5 +156,5 @@ void unsupported_format_starts_clean_timing_epoch(){
 void processing_failure_keeps_aligned_ordinary_audio(){Harness h;h.Enable();for(int n=0;n<12;++n)h.Step(n);h.factory.fail_process=true;h.Step(12);for(int n=13;n<25;++n){auto r=h.Step(n);assert(r.state==EffectiveState::Unavailable);assert(h.output[0]==(100+n-5)/32768.f);}assert(h.factory.live==0);}
 int main(){std::cout.setf(std::ios::unitbuf);
 #define RUN(t) t();std::cout<<#t<<" PASS\n";
-RUN(defaults_and_off_identity);RUN(late_output_uses_matched_dry);RUN(three_misses_enter_safe_fallback_but_worker_recovers);RUN(overload_window_ignores_ineligible_slots_and_recovers_with_hysteresis);RUN(manual_bypass_suspends_inference_keeps_delay);RUN(zero_is_aligned_dry);RUN(settings_do_not_reset_stream);RUN(mobile_fused_model_uses_standard_delay_contract);RUN(receive_failure_does_not_stop_send);RUN(model_switch_load_failure);RUN(rapid_switch_has_no_old_epoch);RUN(off_returns_direct_and_no_replay);RUN(config_atomic_and_direction_isolation);RUN(generation_invalidates_audio);RUN(stress_no_callback_allocation);RUN(invalidate_during_actual_load);RUN(repeated_invalidate_without_frames);RUN(invalid_native_config_is_rejected);RUN(unsupported_format_starts_clean_timing_epoch);RUN(processing_failure_keeps_aligned_ordinary_audio);
+RUN(defaults_and_off_identity);RUN(late_output_uses_matched_dry);RUN(three_misses_enter_safe_fallback_but_worker_recovers);RUN(overload_window_ignores_ineligible_slots_and_recovers_with_hysteresis);RUN(manual_bypass_suspends_inference_keeps_delay);RUN(zero_is_aligned_dry);RUN(settings_do_not_reset_stream);RUN(mobile_fused_model_uses_pinned_zero_lookahead_contract);RUN(receive_failure_does_not_stop_send);RUN(model_switch_load_failure);RUN(rapid_switch_has_no_old_epoch);RUN(off_returns_direct_and_no_replay);RUN(config_atomic_and_direction_isolation);RUN(generation_invalidates_audio);RUN(stress_no_callback_allocation);RUN(invalidate_during_actual_load);RUN(repeated_invalidate_without_frames);RUN(invalid_native_config_is_rejected);RUN(unsupported_format_starts_clean_timing_epoch);RUN(processing_failure_keeps_aligned_ordinary_audio);
 }
