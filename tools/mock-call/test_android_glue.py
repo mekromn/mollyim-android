@@ -57,7 +57,8 @@ class SignalAudioManager {enum class AudioDevice {NONE};interface EventListener 
  files.append(write('CallAudioSession.kt',source))
  source=(A/'CallDenoiseController.kt').read_text();files.append(write('DenoiseStatus.kt','package org.thoughtcrime.securesms.webrtc.audio\n'+source[source.index('data class DenoiseStatus('):]))
  files += [str(A/(n+'.kt')) for n in ('CallDenoiseSettings','IncomingAudioSettings','DenoiseCoordinator')]
- files += [str(p) for p in (A/'mock').glob('*.kt') if p.name!='MockCallLabActivity.kt']
+ mock_files=sorted((A/'mock').glob('*.kt'))
+ files += [str(p) for p in mock_files if p.name!='MockCallLabActivity.kt']
  result=subprocess.run(['kotlinc',*files,'-cp',str(coroutines),'-d',str(w/'glue.jar')],capture_output=True,text=True)
  if result.returncode:
   print(result.stdout+result.stderr);raise SystemExit(result.returncode)
