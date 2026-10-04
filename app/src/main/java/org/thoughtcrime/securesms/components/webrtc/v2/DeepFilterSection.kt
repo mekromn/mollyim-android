@@ -94,7 +94,7 @@ fun DeepFilterSection(
         Switch(checked = settings.enabled, onCheckedChange = { onUpdate(settings.copy(enabled = it), true) },
           modifier = Modifier.testTag("$prefix-enable").semantics { contentDescription = enableLabel })
       }
-      Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+      Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         Model.entries.forEach { model ->
           FilterChip(selected = settings.model == model, onClick = { onUpdate(settings.copy(model = model), true) },
             label = { Text(stringResource(when (model) {
@@ -128,7 +128,7 @@ fun DeepFilterSection(
         Switch(checked = settings.postFilter, onCheckedChange = { onUpdate(settings.copy(postFilter = it), true) },
           modifier = Modifier.testTag("$prefix-post").semantics { contentDescription = postLabel })
       }
-      DenoiseSlider(stringResource(R.string.denoise_post_strength), settings.beta, 0f..0.05f, 3, "", "$prefix-beta", onSave) {
+      DenoiseSlider(stringResource(R.string.denoise_post_strength), settings.beta, 0f..0.05f, 3, "", "$prefix-beta", onSave, enabled = settings.postFilter) {
         onUpdate(settings.copy(beta = it), false)
       }
       TextButton(onClick = { advanced = !advanced }) {
@@ -162,13 +162,13 @@ fun DeepFilterSection(
 }
 
 @Composable
-private fun DenoiseSlider(label: String, value: Float, range: ClosedFloatingPointRange<Float>, decimals: Int, unit: String, tag: String, onSave: () -> Unit, onValue: (Float) -> Unit) {
+private fun DenoiseSlider(label: String, value: Float, range: ClosedFloatingPointRange<Float>, decimals: Int, unit: String, tag: String, onSave: () -> Unit, enabled: Boolean = true, onValue: (Float) -> Unit) {
   Column {
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
       Text(label, style = MaterialTheme.typography.bodyMedium)
       Text("${denoiseNumber(value, decimals)} $unit", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
     }
-    Slider(value = value.coerceIn(range), valueRange = range,
+    Slider(value = value.coerceIn(range), valueRange = range, enabled = enabled,
       onValueChange = { onValue(if (decimals == 3) round(it * 1000f) / 1000f else round(it)) },
       onValueChangeFinished = onSave, modifier = Modifier.testTag(tag).semantics { contentDescription = label })
   }
