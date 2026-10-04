@@ -31,4 +31,11 @@ class DeepFilterAssetsTest {
     assertArrayEquals(old, original.readBytes())
     assertEquals(1, directory.listFiles()!!.size)
   }
+
+  @Test fun bundled_manifest_pins_mobile_fused_model() {
+    assertEquals(3, ModelAssetStore.MODELS.size)
+    val mobile = ModelAssetStore.MODELS.single { it.name == "DeepFilterNet3_onnx_mobile.tar.gz" }
+    assertEquals(7_984_565L, mobile.bytes)
+    assertEquals("5600b6857117ecc7cf460b8ec4841963bfa6d718921d424d42dea5d3d37a8c32", mobile.sha256)
+  }
 }
