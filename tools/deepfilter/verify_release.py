@@ -11,7 +11,7 @@ PACKAGE='com.mekromn.mollyaudio'
 CERT='eb6825c9abab77a52cf12444d078d4b808c4c708ec31efaf8c59b0adf686557b'
 JNI={
  'Lorg/thoughtcrime/securesms/webrtc/audio/CallDenoiseBridge;':{
-  'nativeVersion':'()I','nativePaths':'(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Z',
+  'nativeVersion':'()I','nativePaths':'(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Z',
   'nativeApply':'(IZIFZFFFF)Z','nativeBypass':'(IZ)V','nativeRetry':'(I)V','nativeStatus':'(I[F)Z'},
  'Lorg/signal/ringrtc/CallDenoiseGate;':{
   'nativeBeginFactory':'()J','nativeFinishFactory':'(J)Z','nativeNewOwner':'()J',
