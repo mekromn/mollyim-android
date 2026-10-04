@@ -17,6 +17,6 @@ kotlinc "$OUT/Context.kt" "$OUT/CallAudioSession.kt" "$OUT/DenoiseStatus.kt" \
  "$A/CallDenoiseSettings.kt" "$A/IncomingAudioSettings.kt" "$A/DenoiseCoordinator.kt" \
  "$A/mock/LabConfiguration.kt" "$A/mock/LabCoordinator.kt" "$A/mock/LabLifecycle.kt" \
  "$A/mock/LabRouteController.kt" "$A/mock/LabWaveCodec.kt" "$A/mock/LabTakeStore.kt" \
- "$A/mock/LabStatsSnapshot.kt" "$A/mock/LabControllerPorts.kt" "$A/mock/MockCallLabController.kt" \
+ "$A/mock/LabStatsSnapshot.kt" "$A/mock/LabBenchmark.kt" "$A/mock/LabControllerPorts.kt" "$A/mock/MockCallLabController.kt" \
  "$ROOT/tools/mock-call/tests/ControllerContracts.kt" -cp "$COROUTINES" -include-runtime -d "$OUT/tests.jar"
 java -cp "$OUT/tests.jar:$COROUTINES" org.thoughtcrime.securesms.webrtc.audio.mock.ControllerContractsKt
