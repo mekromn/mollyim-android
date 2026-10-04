@@ -88,7 +88,14 @@ fun main(){
   check(c.view.value.selectionStartMs==0L && c.view.value.selectionEndMs==20L) {"Auto-selected replay must expose its whole recorded interval"}
 
   val longWav=File(root,"benchmark.wav")
-  LabWaveCodec.Writer(longWav,8000,1,WaveEncoding.PCM16).use{it.append(FloatArray(32000){0.125f})}
+  LabWaveCodec.Writer(longWav,8000,1,WaveEncoding.PCM16).use{writer->
+    var left=32000
+    while(left>0){
+      val count=minOf(left,3840)
+      writer.append(FloatArray(count){0.125f})
+      left-=count
+    }
+  }
   val longTake=c.importWave({longWav.inputStream()},"Benchmark source").get()
   c.selectSource(Direction.SENT,longTake.id,0).get()
   engine.simulateBenchmark=true
