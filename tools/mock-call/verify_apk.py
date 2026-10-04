@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Verify the actual optimized Mock Call Lab APK, never just artifact filenames."""
 from pathlib import Path
-import argparse,json,re,subprocess,sys,tempfile,zipfile
+import argparse,hashlib,json,re,subprocess,sys,tempfile,zipfile
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'deepfilter'))
 import verify_release as df
 from verify_native import CPP,JNI
@@ -40,6 +40,14 @@ def manifest(text):
 
 def verify_mock_dex(text):return df.verify_dexdump(text,MOCK_JNI)
 
+def verify_mobile_bytes(data,spec):
+ if len(data)!=int(spec['bytes']) or hashlib.sha256(data).hexdigest()!=spec['sha256']:
+  raise ValueError('Mobile fused model payload differs from pinned bytes')
+ meta=spec.get('meta') or {}
+ if meta.get('sample_rate')!=48000 or meta.get('hop')!=480 or meta.get('fft')!=960 or meta.get('lookahead')!=0 or meta.get('intrinsic_delay')!=480:
+  raise ValueError('Mobile fused model metadata contract changed')
+ return {'sha256':spec['sha256'],'bytes':int(spec['bytes']),'lookahead':0,'intrinsic_delay':480}
+
 def verify(apk,aar,sdk):
  root=Path(__file__).resolve().parents[2]
  result=df.verify_payload(apk,root/'tools/deepfilter/models.lock.json',aar)
@@ -48,6 +56,11 @@ def verify(apk,aar,sdk):
  resources=subprocess.check_output([str(sdk/'aapt2'),'dump','resources',str(apk)],text=True)
  if not re.search(r'\braw/deepfilter_notices\b',resources):raise ValueError('Attribution was removed')
  with zipfile.ZipFile(apk) as z,tempfile.TemporaryDirectory() as td:
+  mobile=json.loads((root/'tools/deepfilter/mobile-model.lock.json').read_text())
+  mobile_path='assets/deepfilter/'+mobile['asset']
+  try: mobile_bytes=z.read(mobile_path)
+  except KeyError as e: raise ValueError('Missing bundled mobile fused model') from e
+  result['models']['mobile_fused']=verify_mobile_bytes(mobile_bytes,mobile)
   dumps=[]
   for name in z.namelist():
    if re.fullmatch('classes[0-9]*.dex',name):
