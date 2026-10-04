@@ -1,0 +1,22 @@
+{
+  "schema": 1,
+  "id": "mobile_fused",
+  "wire_id": 2,
+  "asset": "DeepFilterNet3_onnx_mobile.tar.gz",
+  "source_repository": "KaleyraVideo/DeepFilterNet",
+  "source_revision": "ee6505ab4e899d3bef734427e627a266b6fef441",
+  "source_path": "models/DeepFilterNet3_onnx_mobile.tar.gz",
+  "bytes": 7984565,
+  "git_blob_sha1": "c13aee93c3062b31c22c8d9667c708cb2058f80d",
+  "sha256": "5600b6857117ecc7cf460b8ec4841963bfa6d718921d424d42dea5d3d37a8c32",
+  "meta": {
+    "sample_rate": 48000,
+    "hop": 480,
+    "fft": 960,
+    "lookahead": 0,
+    "df_order": 5,
+    "erb_bands": 32,
+    "df_bins": 96,
+    "intrinsic_delay": 480
+  }
+}
