@@ -63,12 +63,18 @@ jobs:
           run-id: 36929152476
           github-token: ${{ github.token }}
           path: out/reference
-      - name: Verify actual native inputs and both bundled models
+      - uses: actions/download-artifact@v4
+        with:
+          name: deepfilter-mobile-fused-model
+          run-id: 37150609744
+          github-token: ${{ github.token }}
+          path: out/mobile-model
+      - name: Verify actual native inputs and all bundled models
         run: |
           mkdir -p out/mock-app-reports
           python3 tools/mock-call/verify_native.py out/native/ringrtc-mock-arm64.aar > out/mock-app-reports/native.json
           python3 - <<'PY'
-          import json,sys
+          import hashlib,json,sys
           from pathlib import Path
           sys.path.insert(0,'tools/deepfilter')
           from verify_release import verify_inputs
@@ -78,6 +84,20 @@ jobs:
           for m in json.loads(lock.read_text())['models']:
               publish_asset((Path('out/reference/models')/m['asset']).read_bytes(),m,Path('app/src/main/assets/deepfilter')/m['asset'])
           (Path('app/src/main/assets/deepfilter')/'models.json').write_bytes(lock.read_bytes())
+
+          mobile=json.loads(Path('tools/deepfilter/mobile-model.lock.json').read_text())
+          derived=json.loads(Path('out/mobile-model/manifest-derived.json').read_text())
+          for key in ('id','wire_id','asset','source_repository','source_revision','source_path','bytes','git_blob_sha1','sha256','meta'):
+              if derived.get(key)!=mobile.get(key):
+                  raise ValueError('Mobile model proof drift: '+key)
+          payload=(Path('out/mobile-model')/mobile['asset']).read_bytes()
+          if len(payload)!=mobile['bytes'] or hashlib.sha256(payload).hexdigest()!=mobile['sha256']:
+              raise ValueError('Mobile fused model payload drift')
+          destination=Path('app/src/main/assets/deepfilter')/mobile['asset']
+          destination.parent.mkdir(parents=True,exist_ok=True)
+          destination.write_bytes(payload)
+          for name in ('LICENSE','LICENSE-APACHE','LICENSE-MIT'):
+              (destination.parent/('mobile-'+name)).write_bytes((Path('out/mobile-model')/name).read_bytes())
           PY
       - name: Preserve locked dependency attribution
         run: |
