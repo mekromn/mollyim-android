@@ -11,7 +11,7 @@ internal object DeepFilterAssets {
     val directory = File(context.noBackupFilesDir, "deepfilter-v1")
     val files = ModelAssetStore(directory, { context.assets.open("deepfilter/$it") }).install()
     val runtime = File(context.applicationInfo.nativeLibraryDir, "libmolly_deepfilter.so")
-    if (!runtime.isFile || files.size != 2) throw IOException("Packaged native denoiser unavailable")
-    return CallDenoiseBridge.paths(runtime.absolutePath, files[0].absolutePath, files[1].absolutePath)
+    if (!runtime.isFile || files.size != 3) throw IOException("Packaged native denoiser unavailable")
+    return CallDenoiseBridge.paths(runtime.absolutePath, files[0].absolutePath, files[1].absolutePath, files[2].absolutePath)
   }
 }
