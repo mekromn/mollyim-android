@@ -12,16 +12,22 @@ int main(int argc,char**argv){
  REQUIRE(argc==6);void*lib=dlopen(argv[1],RTLD_NOW|RTLD_LOCAL);if(!lib){fprintf(stderr,"%s\n",dlerror());return 1;}
  LOAD(abi_version);LOAD(create);LOAD(configure);LOAD(process);LOAD(reset);LOAD(destroy);REQUIRE(api_abi_version()==1);
  DfConfig c={1,30,0,0.02f,-10,30,20,0};DfMeta meta={0};DfHandle*h=NULL;
- REQUIRE(api_create(NULL,0,&c,&h,&meta)!=0);size_t bytes,n,gold_n;unsigned char*m=read_all(argv[2],&bytes);
- float*input=(float*)read_all(argv[3],&n),*gold=(float*)read_all(argv[4],&gold_n);REQUIRE(n==48000*sizeof(float)&&n==gold_n);
+ REQUIRE(api_create(NULL,0,&c,&h,&meta)!=0);size_t bytes,n,gold_n=0;unsigned char*m=read_all(argv[2],&bytes);
+ float*input=(float*)read_all(argv[3],&n);const int has_gold=strcmp(argv[4],"-")!=0;float*gold=has_gold?(float*)read_all(argv[4],&gold_n):NULL;
+ REQUIRE(n==48000*sizeof(float)&&(!has_gold||n==gold_n));
  REQUIRE(api_create(m,bytes,&c,&h,&meta)==0&&h);REQUIRE(meta.sample_rate==48000&&meta.hop==480&&meta.fft==960);
  REQUIRE(meta.intrinsic_delay==(unsigned)atoi(argv[5]));
- float output[480],snr=0;double max_error=0,changed=0;for(size_t off=0;off<48000;off+=480){REQUIRE(api_process(h,input+off,480,output,480,&snr)==0);REQUIRE(isfinite(snr));for(size_t i=0;i<480;i++){REQUIRE(isfinite(output[i]));double e=fabs(output[i]-gold[off+i]);if(e>max_error)max_error=e;changed+=fabs(output[i]-input[off+i]);}}
- REQUIRE(max_error<=1e-4&&changed>0.001);
- REQUIRE(api_reset(h)==0);REQUIRE(api_process(h,input,480,output,480,&snr)==0);for(size_t i=0;i<480;i++)REQUIRE(fabs(output[i]-gold[i])<=1e-4);
+ float output[480],first_output[480],snr=0;double max_error=0,changed=0;
+ for(size_t off=0;off<48000;off+=480){
+  REQUIRE(api_process(h,input+off,480,output,480,&snr)==0);REQUIRE(isfinite(snr));
+  if(off==0)memcpy(first_output,output,sizeof(first_output));
+  for(size_t i=0;i<480;i++){REQUIRE(isfinite(output[i]));if(has_gold){double e=fabs(output[i]-gold[off+i]);if(e>max_error)max_error=e;}changed+=fabs(output[i]-input[off+i]);}
+ }
+ REQUIRE((!has_gold||max_error<=1e-4)&&changed>0.001);
+ REQUIRE(api_reset(h)==0);REQUIRE(api_process(h,input,480,output,480,&snr)==0);for(size_t i=0;i<480;i++)REQUIRE(fabs(output[i]-(has_gold?gold[i]:first_output[i]))<=1e-4);
  DfConfig invalid=c;invalid.abi_version=99;REQUIRE(api_configure(h,&invalid)!=0);REQUIRE(api_process(h,input,479,output,480,&snr)!=0);
  // Independent silent channel must not inherit the previous context's speech.
  DfHandle*other=NULL;DfMeta other_meta={0};REQUIRE(api_create(m,bytes,&c,&other,&other_meta)==0&&other);float silence[480]={0};REQUIRE(api_process(other,silence,480,output,480,&snr)==0);for(size_t i=0;i<480;i++)REQUIRE(fabs(output[i])<1e-7);
- api_destroy(other);api_destroy(h);free(m);free(input);free(gold);dlclose(lib);
+ api_destroy(other);api_destroy(h);free(m);free(input);if(gold)free(gold);dlclose(lib);
  printf("{\"native_execution\":true,\"intrinsic_delay\":%u,\"max_reference_error\":%.10g,\"samples\":48000,\"reset_and_channel_isolation\":true}\n",meta.intrinsic_delay,max_error);return 0;
 }
