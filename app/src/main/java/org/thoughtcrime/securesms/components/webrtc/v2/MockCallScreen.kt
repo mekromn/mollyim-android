@@ -22,6 +22,7 @@ import org.thoughtcrime.securesms.events.WebRtcViewModel
 import org.thoughtcrime.securesms.recipients.Recipient
 import org.thoughtcrime.securesms.recipients.RecipientId
 import org.thoughtcrime.securesms.webrtc.audio.Direction
+import org.thoughtcrime.securesms.webrtc.audio.Model
 import org.thoughtcrime.securesms.webrtc.audio.mock.*
 import java.util.Locale
 
@@ -443,6 +444,74 @@ private fun LabCallInfoPanel(
         OutlinedButton(enabled = !view.retired, onClick = { controller.snapshot(i, false) }) { Text("Hear ${if (i == 0) "A" else "B"}") }
       }
       OutlinedButton(enabled = !view.retired && !view.recording, onClick = { controller.renderProcessed() }) { Text("Capture processed pass") }
+    }
+
+    val benchmark = view.benchmark
+    Text("DeepFilter realtime benchmark", style = MaterialTheme.typography.titleMedium)
+    Text(
+      "Replays the same selected sample through Standard, Mobile Fused, and Low Latency using the real call worker. Safe dry fallback stays audible while timing and deadline misses are measured.",
+      style = MaterialTheme.typography.bodySmall
+    )
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+      OutlinedButton(
+        enabled = !view.retired && !view.recording && !benchmark.running && (view.sources[Direction.RECEIVED.wireId]?.durationMs ?: 0) >= 3000,
+        onClick = { controller.benchmark(Direction.RECEIVED) }
+      ) { Text("Benchmark Received") }
+      OutlinedButton(
+        enabled = !view.retired && !view.recording && !benchmark.running && (view.sources[Direction.SENT.wireId]?.durationMs ?: 0) >= 3000,
+        onClick = { controller.benchmark(Direction.SENT) }
+      ) { Text("Benchmark Sent") }
+      if (benchmark.running) {
+        OutlinedButton(onClick = { controller.pause() }) { Text("Stop benchmark") }
+      }
+    }
+    if (benchmark.running) {
+      val current = when (benchmark.currentModel) {
+        Model.STANDARD -> "Standard"
+        Model.LOW_LATENCY -> "Low Latency"
+        Model.MOBILE_FUSED -> "Mobile Fused"
+        null -> "Preparing"
+      }
+      Text("Running ${benchmark.completed + 1}/${benchmark.total}: $current", style = MaterialTheme.typography.labelLarge)
+    }
+    benchmark.summary.results.forEach { result ->
+      val modelLabel = when (result.model) {
+        Model.STANDARD -> "Standard"
+        Model.LOW_LATENCY -> "Low Latency"
+        Model.MOBILE_FUSED -> "Mobile Fused"
+      }
+      Surface(
+        shape = MaterialTheme.shapes.medium,
+        tonalElevation = 1.dp,
+        modifier = Modifier.fillMaxWidth()
+      ) {
+        Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+          Text(modelLabel, style = MaterialTheme.typography.titleSmall)
+          Text(
+            "mean ${String.format(Locale.ROOT, "%.2f", result.meanMs)} ms · p95 ${String.format(Locale.ROOT, "%.2f", result.p95Ms)} ms · RTF ${String.format(Locale.ROOT, "%.2f", result.rtfP95)}",
+            style = MaterialTheme.typography.bodySmall
+          )
+          Text(
+            "processed ${result.processed} · misses ${result.misses} · fallback ${if (result.fallbackOccurred) "yes" else "no"} · SNR ${String.format(Locale.ROOT, "%.1f", result.snr)} dB",
+            style = MaterialTheme.typography.bodySmall
+          )
+          Text(
+            if (result.realtimeSafe) "Realtime-safe" else "Did not meet realtime-safe criteria",
+            color = if (result.realtimeSafe) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.labelMedium
+          )
+        }
+      }
+    }
+    if (!benchmark.running && benchmark.summary.realtimePick != null) {
+      val pick = when (benchmark.summary.realtimePick) {
+        Model.STANDARD -> "Standard"
+        Model.LOW_LATENCY -> "Low Latency"
+        Model.MOBILE_FUSED -> "Mobile Fused"
+        null -> ""
+      }
+      Text("Realtime-safe speed pick: $pick", style = MaterialTheme.typography.labelLarge)
+      Button(onClick = { controller.useBenchmarkPick() }) { Text("Use benchmark pick") }
     }
 
     Text("Microphone route comparison", style = MaterialTheme.typography.titleMedium)
