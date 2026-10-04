@@ -40,6 +40,11 @@ def manifest(text):
 
 def verify_mock_dex(text):return df.verify_dexdump(text,MOCK_JNI)
 
+def baseline_badging(text):
+ match=re.search(r"package: name='([^']+)' versionCode='([0-9]+)'",text)
+ if not match or match[1]!=df.PACKAGE or int(match[2])!=171908:raise ValueError('Unexpected installed mock baseline')
+ return int(match[2])
+
 def verify_mobile_bytes(data,spec):
  if len(data)!=int(spec['bytes']) or hashlib.sha256(data).hexdigest()!=spec['sha256']:
   raise ValueError('Mobile fused model payload differs from pinned bytes')
@@ -82,6 +87,6 @@ if __name__=='__main__':
   if not a.apksigner:p.error('--baseline requires --apksigner')
   if df.signature(a.apk,a.apksigner)!=df.signature(a.baseline,a.apksigner):raise ValueError('Certificate mismatch')
   old=subprocess.check_output([str(a.sdk/'aapt2'),'dump','badging',str(a.baseline)],text=True)
-  if not re.search(r"package: name='"+re.escape(df.PACKAGE)+r"' versionCode='171906'",old):raise ValueError('Wrong delivered baseline')
+  baseline_badging(old)
   r['certificate_sha256']=df.CERT;r['in_place_update_identity']=True
  print(json.dumps(r,indent=2))
