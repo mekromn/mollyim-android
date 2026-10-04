@@ -72,9 +72,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          fetch-depth: 100
       - name: Check reused inference runtime source
-        run: git diff --exit-code 043492092948f7f599237e46af49b667284bcbb8 HEAD -- native/deepfilter-runtime
+        run: |
+          git fetch --no-tags --depth=1 origin 043492092948f7f599237e46af49b667284bcbb8
+          git diff --exit-code 043492092948f7f599237e46af49b667284bcbb8 HEAD -- native/deepfilter-runtime
       - uses: actions/download-artifact@v4
         with:
           name: deepfilter-runtime-android-arm64
