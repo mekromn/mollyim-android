@@ -18,8 +18,27 @@ import java.util.Locale
 private fun ms(value:Float)=String.format(Locale.ROOT,"%.1f",value)
 @Composable
 fun LabStatsPanel(view:MockCallLabController.View,compact:Boolean=false,onExpand:()->Unit={}){
+  if (compact) {
+    val rx=view.stats.received
+    val tx=view.stats.sent
+    val rxP95=if(view.playing&&rx.inferenceValid)ms(rx.p95Ms) else "—"
+    val txP95=if(view.playing&&tx.inferenceValid)ms(tx.p95Ms) else "—"
+    val misses=if(view.playing)rx.misses+tx.misses else 0L
+    Surface(
+      shape=RoundedCornerShape(12.dp),
+      border=BorderStroke(1.dp,MaterialTheme.colorScheme.outlineVariant),
+      modifier=Modifier.fillMaxWidth().testTag("lab-live-stats").clickable(onClick=onExpand)
+    ){
+      Column(Modifier.padding(horizontal=12.dp,vertical=7.dp),verticalArrangement=Arrangement.spacedBy(2.dp)){
+        Text("${view.actualRoute} · ${view.phase}",style=MaterialTheme.typography.labelMedium)
+        Text("Rx p95 $rxP95 ms · Tx p95 $txP95 ms · misses $misses",style=MaterialTheme.typography.bodySmall,color=MaterialTheme.colorScheme.onSurfaceVariant)
+        if(view.stats.dropped>0||view.stats.incomplete)Text("Recording warning: ${view.stats.dropped} dropped blocks",color=MaterialTheme.colorScheme.error,style=MaterialTheme.typography.labelSmall)
+      }
+    }
+    return
+  }
   Surface(shape=RoundedCornerShape(16.dp),border=BorderStroke(1.dp,MaterialTheme.colorScheme.outlineVariant),modifier=Modifier.fillMaxWidth().testTag("lab-live-stats").clickable(onClick=onExpand)){
-    Column(Modifier.padding(if(compact)8.dp else 12.dp),verticalArrangement=Arrangement.spacedBy(4.dp)){
+    Column(Modifier.padding(12.dp),verticalArrangement=Arrangement.spacedBy(4.dp)){
       Text("Live audio stats${if(view.frozen)" — DISPLAY PAUSED" else ""}",style=MaterialTheme.typography.labelLarge)
       Text("${view.actualRoute} · ${view.phase}",style=MaterialTheme.typography.labelMedium)
       for((label,d) in listOf("Received" to view.stats.received,"Sent" to view.stats.sent)){
@@ -27,8 +46,8 @@ fun LabStatsPanel(view:MockCallLabController.View,compact:Boolean=false,onExpand
         Text("Block time ${if(d.inferenceValid&&view.playing)ms(d.meanMs)+" / "+ms(d.p95Ms) else "— / —"} ms mean / p95 · missed ${if(view.playing)d.misses.toString() else "—"}",style=MaterialTheme.typography.bodySmall)
         if(d.levelsValid&&view.playing){
           Row(horizontalArrangement=Arrangement.spacedBy(8.dp)){
-            LinearProgressIndicator(progress={d.inputPeak.coerceIn(0f,1f)},modifier=Modifier.weight(1f).height(if(compact)3.dp else 4.dp))
-            LinearProgressIndicator(progress={d.outputPeak.coerceIn(0f,1f)},modifier=Modifier.weight(1f).height(if(compact)3.dp else 4.dp))
+            LinearProgressIndicator(progress={d.inputPeak.coerceIn(0f,1f)},modifier=Modifier.weight(1f).height(4.dp))
+            LinearProgressIndicator(progress={d.outputPeak.coerceIn(0f,1f)},modifier=Modifier.weight(1f).height(4.dp))
           }
         }
       }
