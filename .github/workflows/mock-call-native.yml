@@ -72,7 +72,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 100
+          fetch-depth: 0
       - name: Check reused inference runtime source
         run: git diff --exit-code 043492092948f7f599237e46af49b667284bcbb8 HEAD -- native/deepfilter-runtime
       - uses: actions/download-artifact@v4
