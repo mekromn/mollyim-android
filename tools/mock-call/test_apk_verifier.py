@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 import unittest
 try:
- from verify_apk import badging, manifest, verify_mock_dex, verify_mobile_bytes
+ from verify_apk import badging, baseline_badging, manifest, verify_mock_dex, verify_mobile_bytes
 except ImportError:
- badging=manifest=verify_mock_dex=verify_mobile_bytes=None
+ badging=baseline_badging=manifest=verify_mock_dex=verify_mobile_bytes=None
 
 class PackageTests(unittest.TestCase):
  def test_update_identity(self):
@@ -47,10 +47,15 @@ class PackageTests(unittest.TestCase):
   import hashlib
   self.assertIsNotNone(verify_mobile_bytes)
   data=b'mobile fused fixture'
-  spec={'bytes':len(data),'sha256':hashlib.sha256(data).hexdigest(),'asset':'mobile.tar.gz','meta':{'lookahead':0,'intrinsic_delay':480}}
+  spec={'bytes':len(data),'sha256':hashlib.sha256(data).hexdigest(),'asset':'mobile.tar.gz','meta':{'sample_rate':48000,'hop':480,'fft':960,'lookahead':0,'df_order':5,'erb_bands':32,'df_bins':96,'intrinsic_delay':480}}
   result=verify_mobile_bytes(data,spec)
   self.assertEqual(result['sha256'],spec['sha256'])
   self.assertEqual(result['lookahead'],0)
   with self.assertRaises(ValueError):verify_mobile_bytes(data+b'x',spec)
   with self.assertRaises(ValueError):verify_mobile_bytes(data,{**spec,'sha256':'00'*32})
+ def test_update_baseline_is_the_delivered_171908_build(self):
+  self.assertIsNotNone(baseline_badging)
+  good="package: name='com.mekromn.mollyaudio' versionCode='171908' versionName='8.19.2-4'\n"
+  self.assertEqual(baseline_badging(good),171908)
+  with self.assertRaises(ValueError):baseline_badging(good.replace('171908','171906'))
 if __name__=='__main__':unittest.main()
