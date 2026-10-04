@@ -97,7 +97,11 @@ fun DeepFilterSection(
       Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         Model.entries.forEach { model ->
           FilterChip(selected = settings.model == model, onClick = { onUpdate(settings.copy(model = model), true) },
-            label = { Text(stringResource(if (model == Model.STANDARD) R.string.denoise_standard else R.string.denoise_low_latency)) },
+            label = { Text(stringResource(when (model) {
+              Model.STANDARD -> R.string.denoise_standard
+              Model.LOW_LATENCY -> R.string.denoise_low_latency
+              Model.MOBILE_FUSED -> R.string.denoise_mobile_fused
+            })) },
             modifier = Modifier.testTag("$prefix-model-${model.wireId}"))
         }
       }
