@@ -71,6 +71,8 @@ class ScreenContracts(unittest.TestCase):
  def test_mobile_model_and_realtime_benchmark_are_exposed_truthfully(self):
   section=(A/'components/webrtc/v2/DeepFilterSection.kt').read_text()
   self.assertIn('Model.MOBILE_FUSED -> R.string.denoise_mobile_fused',section)
+  self.assertIn('Row(Modifier.horizontalScroll(rememberScrollState())',section)
+  self.assertIn('enabled = settings.postFilter',section)
   strings=(ROOT/'app/src/main/res/values/call_denoise.xml').read_text()
   self.assertIn('name="denoise_mobile_fused">Mobile Fused<',strings)
 
