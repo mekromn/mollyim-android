@@ -64,4 +64,16 @@ class ScreenContracts(unittest.TestCase):
   self.assertNotIn('if(!compact)',s,'Pinned stats must not hide processing time, faults or meters')
   for x in ('d.meanMs','d.p95Ms','d.misses','d.inputPeak','d.outputPeak'):
    self.assertIn(x,s)
+
+ def test_mobile_model_and_realtime_benchmark_are_exposed_truthfully(self):
+  section=(A/'components/webrtc/v2/DeepFilterSection.kt').read_text()
+  self.assertIn('Model.MOBILE_FUSED -> R.string.denoise_mobile_fused',section)
+  strings=(ROOT/'app/src/main/res/values/call_denoise.xml').read_text()
+  self.assertIn('name="denoise_mobile_fused">Mobile Fused<',strings)
+
+  screen=(A/'components/webrtc/v2/MockCallScreen.kt').read_text()
+  for x in ('DeepFilter realtime benchmark','controller.benchmark(Direction.RECEIVED)',
+            'controller.benchmark(Direction.SENT)','controller.useBenchmarkPick()',
+            'result.rtfP95','result.p95Ms','result.misses','result.fallbackOccurred'):
+   self.assertIn(x,screen)
 if __name__=='__main__':unittest.main()
