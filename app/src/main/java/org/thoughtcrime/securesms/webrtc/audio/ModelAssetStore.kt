@@ -70,7 +70,8 @@ internal class ModelAssetStore(
   companion object {
     val MODELS = listOf(
       ModelAsset("DeepFilterNet3_onnx.tar.gz", 7_983_136L, "c94d91f70911001c946e0fabb4aa9adc37045f45a03b56008cb0c8244cb63616"),
-      ModelAsset("DeepFilterNet3_ll_onnx.tar.gz", 36_359_660L, "5998e58e8ba0e09bb76986ef97b84afa065a571ef282d4a1222f341e3251cf3a")
+      ModelAsset("DeepFilterNet3_ll_onnx.tar.gz", 36_359_660L, "5998e58e8ba0e09bb76986ef97b84afa065a571ef282d4a1222f341e3251cf3a"),
+      ModelAsset("DeepFilterNet3_onnx_mobile.tar.gz", 7_984_565L, "5600b6857117ecc7cf460b8ec4841963bfa6d718921d424d42dea5d3d37a8c32")
     )
   }
 }
