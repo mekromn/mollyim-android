@@ -59,7 +59,7 @@ std::unique_ptr<StreamingEngine> RuntimeFactory::Create(Model model,uint32_t cha
   };
   DfHandle* handle=nullptr;DfMeta meta{};
   if(storage_->create(bytes->data(),bytes->size(),&config,&handle,&meta)!=0){forget_failed_bytes();return nullptr;}
-  if(!handle||!DelayPlan::For(48000,1,meta)||meta.lookahead!=(model==Model::LowLatency?0u:2u)){
+  if(!handle||!DelayPlan::For(48000,1,meta)||meta.lookahead!=(model==Model::Standard?2u:0u)){
     if(handle)storage_->destroy(handle);
     forget_failed_bytes();return nullptr;
   }
