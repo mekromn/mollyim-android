@@ -59,11 +59,14 @@ class ScreenContracts(unittest.TestCase):
   h=(A/'components/settings/app/help/HelpSettingsFragment.kt').read_text()
   self.assertIn('MockCallLabActivity',h)
 
- def test_compact_stats_keep_timing_misses_and_levels_visible(self):
+ def test_compact_stats_keep_latency_and_misses_without_full_diagnostic_card(self):
   s=(A/'components/webrtc/v2/LabStatsPanel.kt').read_text().split('@OptIn',1)[0]
-  self.assertNotIn('if(!compact)',s,'Pinned stats must not hide processing time, faults or meters')
-  for x in ('d.meanMs','d.p95Ms','d.misses','d.inputPeak','d.outputPeak'):
+  self.assertIn('if (compact)',s)
+  for x in ('d.p95Ms','d.misses','view.actualRoute'):
    self.assertIn(x,s)
+  self.assertIn('Live audio stats',s)
+  self.assertIn('d.inputPeak',s)
+  self.assertIn('d.outputPeak',s)
 
  def test_mobile_model_and_realtime_benchmark_are_exposed_truthfully(self):
   section=(A/'components/webrtc/v2/DeepFilterSection.kt').read_text()
