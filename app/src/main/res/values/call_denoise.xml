@@ -8,6 +8,7 @@
   <string name="denoise_enable">Enable noise reduction</string>
   <string name="denoise_standard">Standard</string>
   <string name="denoise_low_latency">Low Latency</string>
+  <string name="denoise_mobile_fused">Mobile Fused</string>
   <string name="denoise_attenuation">Suppression limit</string>
   <string name="denoise_limit_note">0 dB bypasses denoising. 100 dB allows unrestricted model suppression; it does not guarantee 100 dB of noise removal.</string>
   <string name="denoise_post_filter">Post-filter</string>
