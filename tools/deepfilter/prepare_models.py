@@ -27,7 +27,11 @@ def validate_archive(data: bytes, expected: dict) -> dict:
         with tarfile.open(fileobj=io.BytesIO(data), mode='r:gz') as archive:
             for member in archive:
                 path = PurePosixPath(member.name)
-                if not member.isfile() or path.is_absolute() or '..' in path.parts or '\\' in member.name or ':' in member.name:
+                if path.is_absolute() or '..' in path.parts or '\\' in member.name or ':' in member.name:
+                    raise ValueError('Unsafe model archive member')
+                if member.isdir():
+                    continue
+                if not member.isfile():
                     raise ValueError('Unsafe model archive member')
                 record = required.get(member.name)
                 total += member.size
