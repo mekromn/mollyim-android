@@ -1,23 +1,48 @@
 #!/usr/bin/env python3
-"""Canonicalize only the two pinned model assets before alignment/signing.
+"""Canonicalize pinned DeepFilter model assets before alignment/signing.
 
-Some asset-packaging paths expand .gz inputs. The app requires the original,
-hash-pinned archives. Never alter DEX, resources, native code, other assets,
-or an existing signed APK. A corrupt existing model is an error, not repaired.
+Some Android asset-packaging paths expand .gz inputs. The app requires the
+original hash-pinned archives. Never alter DEX, resources, native code, other
+assets, or an existing signed APK. A corrupt existing model is an error, not
+repaired.
 """
 import argparse,copy,gzip,hashlib,json,os,re,shutil,tempfile,zipfile
 from pathlib import Path
 from prepare_models import validate_archive
 
 def sha(data):return hashlib.sha256(data).hexdigest()
-def finalize(source:Path,destination:Path,models:Path,lock:Path)->dict:
+
+def _locked_models(lock:Path):
+ raw=json.loads(Path(lock).read_text())
+ if isinstance(raw,dict) and 'models' in raw:
+  models=raw['models']
+ else:
+  models=[raw]
+ if not isinstance(models,list):raise ValueError('Invalid model lock')
+ return models
+
+def _payloads(models:Path,lock:Path):
+ models=Path(models);result={}
+ for item in _locked_models(Path(lock)):
+  if not isinstance(item,dict):raise ValueError('Invalid model lock entry')
+  asset=item.get('asset','')
+  name='assets/deepfilter/'+asset
+  if '/' in asset or not asset.endswith('.tar.gz'):raise ValueError('Unexpected model asset name')
+  if name in result:raise ValueError('Duplicate model asset: '+name)
+  data=(models/asset).read_bytes()
+  validate_archive(data,item)
+  result[name]=data
+ return result
+
+def finalize(source:Path,destination:Path,models:Path,lock:Path,extra_models:Path|None=None,extra_lock:Path|None=None)->dict:
  source=Path(source);destination=Path(destination);models=Path(models)
  if source.resolve()==destination.resolve() or destination.exists():raise ValueError('Use a new unsigned output path')
- expected=json.loads(Path(lock).read_text())['models'];payloads={}
- for item in expected:
-  name='assets/deepfilter/'+item['asset']
-  if '/' in item['asset'] or not item['asset'].endswith('.tar.gz'):raise ValueError('Unexpected model asset name')
-  data=(models/item['asset']).read_bytes();validate_archive(data,item);payloads[name]=data
+ if (extra_models is None)!=(extra_lock is None):raise ValueError('Extra models and lock must be supplied together')
+ payloads=_payloads(models,Path(lock))
+ if extra_models is not None:
+  for name,data in _payloads(Path(extra_models),Path(extra_lock)).items():
+   if name in payloads:raise ValueError('Duplicate model asset: '+name)
+   payloads[name]=data
  report={'source_apk_sha256':sha(source.read_bytes()),'added_models':[],'removed_expanded_aliases':[]}
  destination.parent.mkdir(parents=True,exist_ok=True)
  temp=None
@@ -68,4 +93,7 @@ def finalize(source:Path,destination:Path,models:Path,lock:Path)->dict:
 if __name__=='__main__':
  p=argparse.ArgumentParser();p.add_argument('--input',type=Path,required=True);p.add_argument('--output',type=Path,required=True)
  p.add_argument('--models',type=Path,required=True);p.add_argument('--lock',type=Path,default=Path(__file__).with_name('models.lock.json'))
- a=p.parse_args();print(json.dumps(finalize(a.input,a.output,a.models,a.lock),indent=2))
+ p.add_argument('--extra-models',type=Path);p.add_argument('--extra-lock',type=Path)
+ a=p.parse_args()
+ if (a.extra_models is None)!=(a.extra_lock is None):p.error('--extra-models and --extra-lock must be supplied together')
+ print(json.dumps(finalize(a.input,a.output,a.models,a.lock,a.extra_models,a.extra_lock),indent=2))
