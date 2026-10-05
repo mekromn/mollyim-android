@@ -137,7 +137,10 @@ jobs:
           cp "$SDK/aapt2" "$SDK/dexdump" "$SDK/zipalign" out/mock-sdk/
           cp "$SDK/lib/apksigner.jar" out/mock-sdk/
           cp "$SDK/lib64/libc++.so" out/mock-sdk/lib64/
-          python3 tools/deepfilter/finalize_models.py --input "${apks[0]}" --output out/model-complete.apk --models out/reference/models > out/mock-app-reports/models.json
+          python3 tools/deepfilter/finalize_models.py --input "${apks[0]}" --output out/model-complete.apk \
+            --models out/reference/models --lock tools/deepfilter/models.lock.json \
+            --extra-models out/mobile-model --extra-lock tools/deepfilter/mobile-model.lock.json \
+            > out/mock-app-reports/models.json
           "$SDK/zipalign" -P 16 -f 4 out/model-complete.apk out/mock-apk/Molly-Audio-Mock-Call-Lab-arm64-unsigned.apk
           "$SDK/zipalign" -c -P 16 4 out/mock-apk/Molly-Audio-Mock-Call-Lab-arm64-unsigned.apk
           python3 tools/mock-call/verify_apk.py --apk out/mock-apk/Molly-Audio-Mock-Call-Lab-arm64-unsigned.apk --aar out/native/ringrtc-mock-arm64.aar --sdk "$SDK" > out/mock-app-reports/apk-verification.json
