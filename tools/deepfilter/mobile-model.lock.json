@@ -9,6 +9,78 @@
   "bytes": 7984565,
   "git_blob_sha1": "c13aee93c3062b31c22c8d9667c708cb2058f80d",
   "sha256": "5600b6857117ecc7cf460b8ec4841963bfa6d718921d424d42dea5d3d37a8c32",
+  "members": [
+    {
+      "path": "._tmp",
+      "bytes": 213,
+      "sha256": "3d480d369c301224589fc8cd31fdc1cbdbe8e08741f34f501997c011dd6e0401"
+    },
+    {
+      "path": "tmp/._.DS_Store",
+      "bytes": 120,
+      "sha256": "2f380f4a3d05a8d90c2106f50da75064e9ce57a598599dc5404f8f69a0223aa9"
+    },
+    {
+      "path": "tmp/.DS_Store",
+      "bytes": 6148,
+      "sha256": "56f114e8cbbce8d1dc5eeb5248bd3fe4f38059e243db2d82620879137fce5c9e"
+    },
+    {
+      "path": "tmp/._export",
+      "bytes": 213,
+      "sha256": "3d480d369c301224589fc8cd31fdc1cbdbe8e08741f34f501997c011dd6e0401"
+    },
+    {
+      "path": "tmp/export/._.DS_Store",
+      "bytes": 120,
+      "sha256": "2f380f4a3d05a8d90c2106f50da75064e9ce57a598599dc5404f8f69a0223aa9"
+    },
+    {
+      "path": "tmp/export/.DS_Store",
+      "bytes": 6148,
+      "sha256": "d65165279105ca6773180500688df4bdc69a2c7b771752f0a46ef120b7fd8ec3"
+    },
+    {
+      "path": "tmp/export/._df_dec.onnx",
+      "bytes": 457,
+      "sha256": "c6af68d08699f98d37c12088b663bfa8b8befadb0be2fa6df8be5471546943a8"
+    },
+    {
+      "path": "tmp/export/df_dec.onnx",
+      "bytes": 3336852,
+      "sha256": "6d4f7d5f830e0214522cf595b9a9e36e8cfc3c03de3917429844e61b39f42242"
+    },
+    {
+      "path": "tmp/export/._config.ini",
+      "bytes": 412,
+      "sha256": "5442833ddbb0d7d251591bedf1e5785f0572b0b13cfe08e6002df875009b508a"
+    },
+    {
+      "path": "tmp/export/config.ini",
+      "bytes": 2067,
+      "sha256": "6fd82652cef2b90375512df15cf028040ac09f9ce353792a4b8ff24e43222b9b"
+    },
+    {
+      "path": "tmp/export/._erb_dec.onnx",
+      "bytes": 457,
+      "sha256": "c136e3d910abb6a589369497d8e6c402d1846b7633f46ce2420542221475c1b0"
+    },
+    {
+      "path": "tmp/export/erb_dec.onnx",
+      "bytes": 3291516,
+      "sha256": "d35a0c0da347eaca939a205ca49bea4d496c9882f07f2dc776b90fe520398624"
+    },
+    {
+      "path": "tmp/export/._enc.onnx",
+      "bytes": 457,
+      "sha256": "a9a87485b433bf912538bbd89c058c11dbfdc8a35fc55ec155810cc7bc599eff"
+    },
+    {
+      "path": "tmp/export/enc.onnx",
+      "bytes": 1952441,
+      "sha256": "2346b8d948af5b8722601180d026a6f39024f46b9d25645bb15e1aef2dba60a6"
+    }
+  ],
   "meta": {
     "sample_rate": 48000,
     "hop": 480,
